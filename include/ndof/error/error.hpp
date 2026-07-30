@@ -22,7 +22,7 @@ namespace ndof::error {
     struct InnerException{
         // If no state, can use a function pointer instead.
         // Otherwise, we will use a ndof::function<void(std::any&)> to rethrow the exception.
-   
+        // Replace the any here.
         using RethrowFn = std::function<void(std::any&)>;
         InnerException(
             std::type_index    index, 
