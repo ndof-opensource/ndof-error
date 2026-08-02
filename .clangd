@@ -2,5 +2,8 @@
 # default search (ancestors of the source file) never looks inside. Point
 # every clangd consumer at it, regardless of editor. Requires one prior run
 # of scripts/build.sh to exist; sanitizer presets share these flags anyway.
+
+# Note: I added c++23 support for the clangd intellisense.  Otherwise, it defaults to c++14 in the container.
 CompileFlags:
   CompilationDatabase: build/Debug
+  Add: [-std=c++23]

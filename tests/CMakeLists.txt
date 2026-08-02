@@ -1,7 +1,8 @@
 find_package(GTest REQUIRED CONFIG)
 
 add_executable(unit_tests
-    version_test.cpp)
+    version_test.cpp
+    object_test.cpp)
 
 target_link_libraries(unit_tests PRIVATE
     ndof::error

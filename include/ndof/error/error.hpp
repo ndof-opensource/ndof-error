@@ -1,16 +1,21 @@
 #include <exception>
 #include <string>
 #include <source_location>
+#include <cstdint>
+#include <typeindex>
+#include <optional>
 
-    // TODO: Find home for this.
-    enum class BuildMode{
+namespace ndof { 
+    // TODO: Find home for these.
+    enum class BuildMode : std::uint8_t{
         undefined,
         debug, 
         release
     };
 
     using CheckMode = BuildMode;
-
+    using Type = std::type_index;
+}
 
 namespace ndof::error {
     
@@ -18,79 +23,137 @@ namespace ndof::error {
     //       In that case, to_string() can be removed and replaced with stream operator.
     //        
     
-    // TODO: Need to make this allocator aware.  
-    struct InnerException{
-        // If no state, can use a function pointer instead.
-        // Otherwise, we will use a ndof::function<void(std::any&)> to rethrow the exception.
-        // Replace the any here.
-        using RethrowFn = std::function<void(std::any&)>;
-        InnerException(
-            std::type_index    index, 
-            // TODO: Get rid of the any here and replace with exception_ptr.
-            std::any           original_exception, 
-            const std::string& exception_type_name,
-            const std::string& message,
-            const RethrowFn&   rethrow_fn
-        );
 
-        // This will be wrapped and mapped to a rtti compile flag check.  
-        // If rtti is disabled, it will resolve to an ndof::type_index.
-        std::type_index       index;
-        std::any              original_exception; // TODO: Fix this.  Make it exception_ptr.
-        std::string           exception_type_name;
-        std::string           message;
-        // Replace with either a function pointer or an ndof::function.
-        std::function<void()> rethrow;
-    };
 
-    struct ConditionCheckError {
-        std::string_view     expression;
-        std::string_view     message;
-        std::source_location location;
-        ContractType         contract_type;
-        CheckMode            check_mode;
-    };
+    // TODO: Consider create a project default config library that  
 
-    // TODO: This needs to be allocator aware.
-    struct ErrorCondition{
-        std::string  failed_condition;
-        std::string  description;
-        ContractType contract_type;
-        CheckMode    check_mode;
-    };
+    // TODO: Consider making this type support wide character strings.
+    // TODO: Or have it in a config file, to define things like debug mode, character types, default allocators, etc.
 
-    using ErrorVariant = std::variant<std::monostate,ErrorCondition,InnerException>;
+    template<typename Allocator = std::allocator<char>>
+    struct Exception : std::exception {
+        using allocated_string 
+           = std::basic_string<char, std::char_traits<char>, Allocator>;
 
-    // Also needs to be allocator aware.
-    // TODO: Figure out a way to globally set error allocators using a singleton or something?
-    struct ErrorMetadata{
-        ErrorMetadata(const ConditionCheckError&, ContractType);
-        ErrorMetadata(const std::source_location&, const InnerException&);
-        ErrorMetadata(const std::source_location& );
-        ErrorMetadata(const ErrorMetadata&)=default;
+        const allocated_string            file_name; 
+        const allocated_string            function_name;
+        const std::uint_least32_t         line;
+        std::optional<std::exception_ptr> inner_exception;
+        BuildMode                         build_mode;
 
-        std::string         file_name;
-        std::string         function_name;
-        std::uint_least32_t line;
-        BuildMode           build_mode;
-        ErrorVariant        details;
 
         // Replace this with an ndof::object type.
         // There will be conversions and adaptor protocols to map ndof::object to nlohmann::json and vice versa.
         // .. and to any other popular serialization format.
         // .. with extensible plugin protocols for other serialization formats.
         // .. Consider how std::formatter can be used to implement this.
-        std::string to_string() const;
-    };
+        allocated_string to_string() const;
 
-    struct Exception : std::exception {
-        Exception(const ErrorMetadata&);
+        Exception(
+            // TODO: wrap this in a FileName class and a FunctionName class?
+            const allocated_string& file_name,
+            const allocated_string& function_name,
+            std::uint_least32_t line,
+            BuildMode build_mode
+        ) = default;
+        Exception(const Exception&) = default;
+        Exception(Exception&&) = default;
+        Exception& operator=(const Exception&) = default;
+        Exception& operator=(Exception&&) = default;
+ 
         ~Exception() = default;
-        const char* what()  const noexcept  override;
-        const ErrorMetadata metadata;
+        [[nodiscard]] virtual const char* what()  const noexcept  override;
 
     private:
 
-        std::string message;
+        allocated_string message;
+    };
+
+    template<typename Allocator = std::allocator<char>>
+    struct ConditionCheckException : Exception<Allocator> {
+        using allocated_string 
+           = std::basic_string<char, std::char_traits<char>, Allocator>;
+        allocated_string     expression;
+        allocated_string     message;
+        std::source_location location;
+        CheckMode            check_mode;
+
+        ConditionCheckException() = default;
+        ConditionCheckException(const ConditionCheckException&) = default;
+        ConditionCheckException(ConditionCheckException&&) = default;
+        ConditionCheckException& operator=(const ConditionCheckException&) = default;
+        ConditionCheckException& operator=(ConditionCheckException&&) = default;
+        ~ConditionCheckException() = default;
+        const char* what()  const noexcept  override;
+    };
+     
+    template<typename Allocator = std::allocator<char>>
+    struct PreConditionCheckException : ConditionCheckException<Allocator> {
+        PreConditionCheckException() = default;
+        PreConditionCheckException(const PreConditionCheckException&) = default;
+        PreConditionCheckException(PreConditionCheckException&&) = default;
+        PreConditionCheckException& operator=(const PreConditionCheckException&) = default;
+        PreConditionCheckException& operator=(PreConditionCheckException&&) = default;
+        ~PreConditionCheckException() = default;
+        template<typename OtherAllocator>
+        PreConditionCheckException(
+            const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
+            const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
+            const std::source_location& location,
+            CheckMode check_mode
+        );
+    };
+
+    template<typename Allocator = std::allocator<char>>
+    struct PostConditionCheckException : ConditionCheckException<Allocator> {
+        PostConditionCheckException() = default;
+        PostConditionCheckException(const PostConditionCheckException&) = default;
+        PostConditionCheckException(PostConditionCheckException&&) = default;
+        PostConditionCheckException& operator=(const PostConditionCheckException&) = default;
+        PostConditionCheckException& operator=(PostConditionCheckException&&) = default;
+        ~PostConditionCheckException() = default;
+        template<typename OtherAllocator>
+        PostConditionCheckException(
+            const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
+            const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
+            const std::source_location& location,
+            CheckMode check_mode
+        );
+    };
+
+    template<typename Allocator = std::allocator<char>>
+    struct InvariantConditionCheckException : ConditionCheckException<Allocator> {
+        InvariantConditionCheckException() = default;
+        InvariantConditionCheckException(const InvariantConditionCheckException&) = default;
+        InvariantConditionCheckException(InvariantConditionCheckException&&) = default;
+        InvariantConditionCheckException& operator=(const InvariantConditionCheckException&) = default;
+        InvariantConditionCheckException& operator=(InvariantConditionCheckException&&) = default;
+        ~InvariantConditionCheckException() = default;
+        template<typename OtherAllocator>
+        InvariantConditionCheckException(
+            const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
+            const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
+            const std::source_location& location,
+            CheckMode check_mode
+        );
+    };
+
+    template<typename Allocator = std::allocator<char>>
+    struct InnerException : Exception<Allocator> {
+        using RethrowFn = void(*)();
+        using allocated_string 
+           = std::basic_string<char, std::char_traits<char>, Allocator>;
+
+        ndof::Type        index;
+        allocated_string  exception_type_name;
+        allocated_string  message;
+        RethrowFn         rethrow;
+
+        InnerException() = default;
+        InnerException(const InnerException&) = default;
+        InnerException(InnerException&&) = default;
+        InnerException& operator=(const InnerException&) = default;
+        InnerException& operator=(InnerException&&) = default;
+        ~InnerException() = default;
     };
 }
