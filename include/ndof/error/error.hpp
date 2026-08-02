@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <typeindex>
 #include <optional>
+#include <stdexcept>
 
 namespace ndof { 
     // TODO: Find home for these.
@@ -15,6 +16,17 @@ namespace ndof {
 
     using CheckMode = BuildMode;
     using Type = std::type_index;
+
+    template<typename Allocator = std::allocator<char>>
+    struct FileName {
+        std::basic_string<char, std::char_traits<char>, Allocator> value;
+    };
+
+    template<typename Allocator = std::allocator<char>>
+    struct FunctionName {
+        std::basic_string<char, std::char_traits<char>, Allocator> value;
+    };
+
 }
 
 namespace ndof::error {
@@ -35,9 +47,12 @@ namespace ndof::error {
         using allocated_string 
            = std::basic_string<char, std::char_traits<char>, Allocator>;
 
-        const allocated_string            file_name; 
-        const allocated_string            function_name;
-        const std::uint_least32_t         line;
+        
+        
+        private:
+        FileName<Allocator>               file_name; 
+        FunctionName<Allocator>           function_name;
+        std::uint_least32_t               line;
         std::optional<std::exception_ptr> inner_exception;
         BuildMode                         build_mode;
 
@@ -64,10 +79,43 @@ namespace ndof::error {
         ~Exception() = default;
         [[nodiscard]] virtual const char* what() const noexcept override;
 
-    private:
+        // TODO: Make available only in builds where exceptions are enabled.
+        void rethrow() const{
+            if (! this->inner_exception.has_value()) {
+                throw std::runtime_error("No inner exception to rethrow.");
+            }
+            std::rethrow_exception(this->inner_exception.value());
+        }
 
+        public:
+        [[nodiscard]] const allocated_string& get_file_name() const noexcept {
+            return file_name.value;
+        }
+
+        [[nodiscard]] const allocated_string& get_function_name() const noexcept {
+            return function_name;
+        }
+
+        [[nodiscard]] std::uint_least32_t get_line() const noexcept {
+            return line;
+        }
+
+        [[nodiscard]] BuildMode get_build_mode() const noexcept {
+            return build_mode;
+        }
+
+        [[nodiscard]] const allocated_string& get_message() const noexcept {
+            // TODO: Implement this.  It perhaps should return an ndof::object type instead of a string.
+            return "implement me";
+        }
+
+        private:
+        // TODO: Remove this, or replace it with an ndof::object type.
         mutable allocated_string message;
     };
+
+ 
+ 
 
     template<typename Allocator = std::allocator<char>>
     struct ConditionCheckException : Exception<Allocator> {
@@ -149,9 +197,9 @@ namespace ndof::error {
            = std::basic_string<char, std::char_traits<char>, Allocator>;
 
         ndof::Type        index;
-        allocated_string  exception_type_name;
-        allocated_string  message;
-        RethrowFn         rethrow;
+
+
+        [[nodiscard]] virtual ndof::Type get_type_impl() const noexcept =0;
 
         InnerException() = default;
         InnerException(const InnerException&) = default;
@@ -161,5 +209,12 @@ namespace ndof::error {
         ~InnerException() = default;
 
         [[nodiscard]] const char* what() const noexcept override;
+    };
+
+    template<typename ExceptionType, typename Allocator = std::allocator<char>>
+    struct ExplicitInnerException : InnerException<Allocator> {
+        [[nodiscard]] ndof::Type get_type_impl() const noexcept override {
+            return typeid(ExceptionType);
+        }
     };
 }
