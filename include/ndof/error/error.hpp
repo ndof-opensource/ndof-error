@@ -68,8 +68,8 @@ namespace ndof::error {
 
         Exception(
             // TODO: wrap this in a FileName class and a FunctionName class?
-            const allocated_string& file_name,
-            const allocated_string& function_name,
+            const FileName<Allocator>& file_name,
+            const FunctionName<Allocator>& function_name,
             std::uint_least32_t line,
             BuildMode build_mode
         ) : file_name(file_name), function_name(function_name), line(line), build_mode(build_mode) {}
@@ -95,7 +95,7 @@ namespace ndof::error {
         }
 
         [[nodiscard]] const allocated_string& get_function_name() const noexcept {
-            return function_name;
+            return function_name.value;
         }
 
         [[nodiscard]] std::uint_least32_t get_line() const noexcept {
@@ -120,17 +120,32 @@ namespace ndof::error {
     struct ConditionCheckException : Exception<Allocator> {
         using allocated_string 
            = std::basic_string<char, std::char_traits<char>, Allocator>;
-        allocated_string     expression;
-        allocated_string     message;
-        CheckMode            check_mode;
 
-        ConditionCheckException() = default;
+        ConditionCheckException() = delete;
         ConditionCheckException(const ConditionCheckException&) = default;
         ConditionCheckException(ConditionCheckException&&) = default;
         ConditionCheckException& operator=(const ConditionCheckException&) = default;
         ConditionCheckException& operator=(ConditionCheckException&&) = default;
         ~ConditionCheckException() = default;
+
+        [[nodiscard]] const allocated_string& get_expression() const noexcept {
+            return expression;
+        }
+
+        [[nodiscard]] const allocated_string& get_message() const noexcept {
+            return message;
+        }
+
+        [[nodiscard]] CheckMode get_check_mode() const noexcept {
+            return check_mode;
+        }
+
         [[nodiscard]] const char* what() const noexcept override;
+
+    private:
+        allocated_string expression;
+        allocated_string message;
+        CheckMode check_mode;
     };
      
     template<typename Allocator = std::allocator<char>>
@@ -195,19 +210,13 @@ namespace ndof::error {
         using allocated_string 
            = std::basic_string<char, std::char_traits<char>, Allocator>;
 
-        // TODO: why is this necessary any more?
-        ndof::Type index{typeid(void)};
-
-
-        [[nodiscard]] virtual ndof::Type get_type_impl() const noexcept =0;
-
         InnerException() = default;
 
         template<typename CapturedException>
         requires (!std::is_same_v<std::remove_cvref_t<CapturedException>, InnerException<Allocator>>)
         explicit InnerException(CapturedException&& exception)
-            : index(typeid(std::remove_cvref_t<CapturedException>)),
-              captured_exception(std::make_exception_ptr(std::forward<CapturedException>(exception))) {
+        // Note: Didn't know about std::make_exception_ptr.
+            : captured_exception(std::make_exception_ptr(std::forward<CapturedException>(exception))) {
         }
 
         InnerException(const InnerException&) = default;
@@ -233,9 +242,6 @@ namespace ndof::error {
             : InnerException<Allocator>(std::forward<ExceptionType>(exception)) {
         }
 
-        [[nodiscard]] ndof::Type get_type_impl() const noexcept override {
-            return this->index;
-        }
     };
 
     template<typename ExceptionType, typename Allocator = std::allocator<char>>
