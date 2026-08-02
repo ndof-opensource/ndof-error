@@ -3,8 +3,10 @@
 #include <source_location>
 #include <cstdint>
 #include <typeindex>
+#include <type_traits>
 #include <optional>
 #include <stdexcept>
+#include <utility>
 
 namespace ndof { 
     // TODO: Find home for these.
@@ -114,9 +116,6 @@ namespace ndof::error {
         mutable allocated_string message;
     };
 
- 
- 
-
     template<typename Allocator = std::allocator<char>>
     struct ConditionCheckException : Exception<Allocator> {
         using allocated_string 
@@ -196,12 +195,21 @@ namespace ndof::error {
         using allocated_string 
            = std::basic_string<char, std::char_traits<char>, Allocator>;
 
-        ndof::Type        index;
+        // TODO: why is this necessary any more?
+        ndof::Type index{typeid(void)};
 
 
         [[nodiscard]] virtual ndof::Type get_type_impl() const noexcept =0;
 
         InnerException() = default;
+
+        template<typename CapturedException>
+        requires (!std::is_same_v<std::remove_cvref_t<CapturedException>, InnerException<Allocator>>)
+        explicit InnerException(CapturedException&& exception)
+            : index(typeid(std::remove_cvref_t<CapturedException>)),
+              captured_exception(std::make_exception_ptr(std::forward<CapturedException>(exception))) {
+        }
+
         InnerException(const InnerException&) = default;
         InnerException(InnerException&&) = default;
         InnerException& operator=(const InnerException&) = default;
@@ -209,12 +217,29 @@ namespace ndof::error {
         ~InnerException() = default;
 
         [[nodiscard]] const char* what() const noexcept override;
+
+    protected:
+        [[nodiscard]] const std::exception_ptr& get_captured_exception() const noexcept {
+            return captured_exception;
+        }
+
+    private:
+        std::exception_ptr captured_exception;
     };
 
     template<typename ExceptionType, typename Allocator = std::allocator<char>>
     struct ExplicitInnerException : InnerException<Allocator> {
+        explicit ExplicitInnerException(ExceptionType&& exception)
+            : InnerException<Allocator>(std::forward<ExceptionType>(exception)) {
+        }
+
         [[nodiscard]] ndof::Type get_type_impl() const noexcept override {
-            return typeid(ExceptionType);
+            return this->index;
         }
     };
+
+    template<typename ExceptionType, typename Allocator = std::allocator<char>>
+    void throw_ndof_exception(ExceptionType&& exception) {
+        throw ExplicitInnerException<ExceptionType, Allocator>(std::forward<ExceptionType>(exception));
+    }
 }
