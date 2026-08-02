@@ -201,13 +201,14 @@ namespace ndof::error {
     template<typename Allocator = std::allocator<char>>
     struct InnerException : Exception<Allocator> {
 
-        using RethrowFn = void(*)();
+ 
         using allocated_string 
            = std::basic_string<char, std::char_traits<char>, Allocator>;
 
         InnerException() = default;
 
         template<typename CapturedException>
+        // Question: Is same or is derived from instead? 
         requires (!std::is_same_v<std::remove_cvref_t<CapturedException>, InnerException<Allocator>>)
         explicit InnerException(CapturedException&& exception)
         // Note: Didn't know about std::make_exception_ptr.
