@@ -55,18 +55,18 @@ namespace ndof::error {
             const allocated_string& function_name,
             std::uint_least32_t line,
             BuildMode build_mode
-        ) = default;
+        ) : file_name(file_name), function_name(function_name), line(line), build_mode(build_mode) {}
         Exception(const Exception&) = default;
         Exception(Exception&&) = default;
         Exception& operator=(const Exception&) = default;
         Exception& operator=(Exception&&) = default;
  
         ~Exception() = default;
-        [[nodiscard]] virtual const char* what()  const noexcept  override;
+        [[nodiscard]] virtual const char* what() const noexcept override;
 
     private:
 
-        allocated_string message;
+        mutable allocated_string message;
     };
 
     template<typename Allocator = std::allocator<char>>
@@ -75,7 +75,6 @@ namespace ndof::error {
            = std::basic_string<char, std::char_traits<char>, Allocator>;
         allocated_string     expression;
         allocated_string     message;
-        std::source_location location;
         CheckMode            check_mode;
 
         ConditionCheckException() = default;
@@ -84,7 +83,7 @@ namespace ndof::error {
         ConditionCheckException& operator=(const ConditionCheckException&) = default;
         ConditionCheckException& operator=(ConditionCheckException&&) = default;
         ~ConditionCheckException() = default;
-        const char* what()  const noexcept  override;
+        [[nodiscard]] const char* what() const noexcept override;
     };
      
     template<typename Allocator = std::allocator<char>>
@@ -102,6 +101,8 @@ namespace ndof::error {
             const std::source_location& location,
             CheckMode check_mode
         );
+
+        [[nodiscard]] const char* what() const noexcept override;
     };
 
     template<typename Allocator = std::allocator<char>>
@@ -136,10 +137,13 @@ namespace ndof::error {
             const std::source_location& location,
             CheckMode check_mode
         );
+
+        [[nodiscard]] const char* what() const noexcept override;
     };
 
     template<typename Allocator = std::allocator<char>>
     struct InnerException : Exception<Allocator> {
+
         using RethrowFn = void(*)();
         using allocated_string 
            = std::basic_string<char, std::char_traits<char>, Allocator>;
@@ -155,5 +159,7 @@ namespace ndof::error {
         InnerException& operator=(const InnerException&) = default;
         InnerException& operator=(InnerException&&) = default;
         ~InnerException() = default;
+
+        [[nodiscard]] const char* what() const noexcept override;
     };
 }
