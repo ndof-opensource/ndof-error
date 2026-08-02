@@ -50,6 +50,18 @@ namespace ndof::error {
         using allocated_string 
            = std::basic_string<char, std::char_traits<char>, Allocator>;
 
+        Exception()
+            : Exception(Allocator()) {
+        }
+
+        explicit Exception(const Allocator& allocator)
+            : message(allocator),
+              file_name{allocated_string(allocator)},
+              function_name{allocated_string(allocator)},
+              line(0),
+              build_mode(BuildMode::undefined) {
+        }
+
         // Replace this with an ndof::object type.
         // There will be conversions and adaptor protocols to map ndof::object to nlohmann::json and vice versa.
         // .. and to any other popular serialization format.
@@ -62,8 +74,13 @@ namespace ndof::error {
             const FileName<Allocator>& file_name,
             const FunctionName<Allocator>& function_name,
             std::uint_least32_t line,
-            BuildMode build_mode
-        ) : file_name(file_name), function_name(function_name), line(line), build_mode(build_mode) {}
+                        BuildMode build_mode,
+                        const Allocator& allocator = Allocator())
+                        : message(allocator),
+                            file_name{allocated_string(file_name.value.c_str(), allocator)},
+                            function_name{allocated_string(function_name.value.c_str(), allocator)},
+                            line(line),
+                            build_mode(build_mode) {}
         Exception(const Exception&) = default;
         Exception(Exception&&) = default;
         Exception& operator=(const Exception&) = default;
@@ -144,7 +161,8 @@ namespace ndof::error {
             const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
             const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
             const std::source_location& location,
-            CheckMode check_mode
+            CheckMode check_mode,
+            const Allocator& allocator = Allocator()
         );
 
     private:
@@ -167,7 +185,8 @@ namespace ndof::error {
             const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
             const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
             const std::source_location& location,
-            CheckMode check_mode
+            CheckMode check_mode,
+            const Allocator& allocator = Allocator()
         );
 
         [[nodiscard]] const char* what() const noexcept override;
@@ -186,7 +205,8 @@ namespace ndof::error {
             const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
             const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
             const std::source_location& location,
-            CheckMode check_mode
+            CheckMode check_mode,
+            const Allocator& allocator = Allocator()
         );
     };
 
@@ -203,7 +223,8 @@ namespace ndof::error {
             const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
             const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
             const std::source_location& location,
-            CheckMode check_mode
+            CheckMode check_mode,
+            const Allocator& allocator = Allocator()
         );
 
         [[nodiscard]] const char* what() const noexcept override;
@@ -216,14 +237,17 @@ namespace ndof::error {
         using allocated_string 
            = std::basic_string<char, std::char_traits<char>, Allocator>;
 
-        InnerException() = default;
+        explicit InnerException(const Allocator& allocator = Allocator())
+            : Exception<Allocator>(allocator) {
+        }
 
         template<typename CapturedException>
         // Question: Is same or is derived from instead? 
         requires (!std::is_same_v<std::remove_cvref_t<CapturedException>, InnerException<Allocator>>)
-        explicit InnerException(CapturedException&& exception)
+        explicit InnerException(CapturedException&& exception, const Allocator& allocator = Allocator())
         // Note: Didn't know about std::make_exception_ptr.
-            : captured_exception(std::make_exception_ptr(std::forward<CapturedException>(exception))) {
+            : Exception<Allocator>(allocator),
+              captured_exception(std::make_exception_ptr(std::forward<CapturedException>(exception))) {
         }
 
         InnerException(const InnerException&) = default;
@@ -250,18 +274,26 @@ namespace ndof::error {
         //       exception before forwarding it to the base class constructor.
         template<typename ForwardedException>
         requires std::is_same_v<std::remove_cvref_t<ForwardedException>, ExceptionType>
-        explicit ExplicitInnerException(ForwardedException&& exception)
-            : InnerException<Allocator>(std::forward<ForwardedException>(exception)) {
+        explicit ExplicitInnerException(
+            ForwardedException&& exception,
+            const Allocator& allocator = Allocator())
+            : InnerException<Allocator>(std::forward<ForwardedException>(exception), allocator) {
         }
 
     };
 
     template<typename ExceptionType, typename Allocator = std::allocator<char>>
-    void throw_ndof_exception(ExceptionType&& exception) {
+    void throw_ndof_exception(
+        ExceptionType&& exception,
+        const Allocator& allocator = Allocator()) {
         using captured_exception_type = std::remove_cvref_t<ExceptionType>;
-        throw ExplicitInnerException<captured_exception_type, Allocator>(std::forward<ExceptionType>(exception));
+        throw ExplicitInnerException<captured_exception_type, Allocator>(
+            std::forward<ExceptionType>(exception),
+            allocator);
     }
 
+
+    // TODO: Move this to a separate include file under a details folder, and make it a private implementation detail of the ndof::error library.
     namespace detail {
 
         [[nodiscard]] inline std::string_view build_mode_to_string(const BuildMode mode) noexcept {
@@ -280,6 +312,7 @@ namespace ndof::error {
 
     template<typename Allocator>
     auto Exception<Allocator>::to_string() const -> allocated_string {
+        // TODO: Consider using std::format() here instead of string concatenation.
         allocated_string output;
         output.reserve(96);
         output += "Exception{";
@@ -308,14 +341,16 @@ namespace ndof::error {
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression_value,
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message_value,
         const std::source_location& location,
-        CheckMode check_mode_value)
+          CheckMode check_mode_value,
+          const Allocator& allocator)
         : Exception<Allocator>(
-              FileName<Allocator>{allocated_string(location.file_name())},
-              FunctionName<Allocator>{allocated_string(location.function_name())},
+              FileName<Allocator>{allocated_string(location.file_name(), allocator)},
+              FunctionName<Allocator>{allocated_string(location.function_name(), allocator)},
               static_cast<std::uint_least32_t>(location.line()),
-              static_cast<BuildMode>(check_mode_value)),
-          expression(expression_value.c_str()),
-          message(message_value.c_str()),
+              static_cast<BuildMode>(check_mode_value),
+              allocator),
+            expression(expression_value.c_str(), allocator),
+            message(message_value.c_str(), allocator),
           check_mode(check_mode_value) {
     }
 
@@ -330,8 +365,9 @@ namespace ndof::error {
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
         const std::source_location& location,
-        CheckMode check_mode)
-        : ConditionCheckException<Allocator>(expression, message, location, check_mode) {
+        CheckMode check_mode,
+        const Allocator& allocator)
+        : ConditionCheckException<Allocator>(expression, message, location, check_mode, allocator) {
     }
 
     template<typename Allocator>
@@ -345,8 +381,9 @@ namespace ndof::error {
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
         const std::source_location& location,
-        CheckMode check_mode)
-        : ConditionCheckException<Allocator>(expression, message, location, check_mode) {
+        CheckMode check_mode,
+        const Allocator& allocator)
+        : ConditionCheckException<Allocator>(expression, message, location, check_mode, allocator) {
     }
 
     template<typename Allocator>
@@ -355,8 +392,9 @@ namespace ndof::error {
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
         const std::source_location& location,
-        CheckMode check_mode)
-        : ConditionCheckException<Allocator>(expression, message, location, check_mode) {
+        CheckMode check_mode,
+        const Allocator& allocator)
+        : ConditionCheckException<Allocator>(expression, message, location, check_mode, allocator) {
     }
 
     template<typename Allocator>
