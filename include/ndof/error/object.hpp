@@ -285,6 +285,8 @@ private:
             std::move(scalar));
     }
 
+    // Rebinds an incoming node to this object's allocator so child/member storage
+    // stays allocator-consistent even when values are created with a different allocator.
     [[nodiscard]] basic_object normalize_value(basic_object&& value) const {
         return basic_object(std::allocator_arg, allocator_, std::move(value));
     }
@@ -299,7 +301,7 @@ private:
         }
     }
 
-    allocator_type allocator_{};
+    [[no_unique_address]] allocator_type allocator_{};
     kind type_{kind::null_value};
     allocated_string name_;
     scalar_type scalar_;
