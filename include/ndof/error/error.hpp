@@ -233,8 +233,8 @@ namespace ndof::error {
 
     template<typename ExceptionType, typename Allocator = std::allocator<char>>
     struct ExplicitInnerException : InnerException<Allocator> {
-        explicit ExplicitInnerException(ExceptionType&& exception)
-            : InnerException<Allocator>(std::forward<ExceptionType>(exception)) {
+        explicit ExplicitInnerException(ExceptionType& exception)
+            : InnerException<Allocator>(exception) {
         }
 
     };
