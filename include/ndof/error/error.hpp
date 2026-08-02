@@ -152,6 +152,7 @@ namespace ndof::error {
         PreConditionCheckException& operator=(PreConditionCheckException&&) = default;
         ~PreConditionCheckException() = default;
         template<typename OtherAllocator>
+        // Question: Do we need deduction guides for this to work?
         PreConditionCheckException(
             const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
             const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
