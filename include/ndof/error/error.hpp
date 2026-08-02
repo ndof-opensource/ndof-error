@@ -49,16 +49,6 @@ namespace ndof::error {
         using allocated_string 
            = std::basic_string<char, std::char_traits<char>, Allocator>;
 
-        
-        
-        private:
-        FileName<Allocator>               file_name; 
-        FunctionName<Allocator>           function_name;
-        std::uint_least32_t               line;
-        std::optional<std::exception_ptr> inner_exception;
-        BuildMode                         build_mode;
-
-
         // Replace this with an ndof::object type.
         // There will be conversions and adaptor protocols to map ndof::object to nlohmann::json and vice versa.
         // .. and to any other popular serialization format.
@@ -79,7 +69,7 @@ namespace ndof::error {
         Exception& operator=(Exception&&) = default;
  
         ~Exception() = default;
-        [[nodiscard]] virtual const char* what() const noexcept override;
+        [[nodiscard]] const char* what() const noexcept override;
 
         // TODO: Make available only in builds where exceptions are enabled.
         void rethrow() const{
@@ -114,6 +104,11 @@ namespace ndof::error {
         private:
         // TODO: Remove this, or replace it with an ndof::object type.
         mutable allocated_string message;
+        FileName<Allocator>               file_name; 
+        FunctionName<Allocator>           function_name;
+        std::uint_least32_t               line;
+        std::optional<std::exception_ptr> inner_exception;
+        BuildMode                         build_mode;
     };
 
     template<typename Allocator = std::allocator<char>>
