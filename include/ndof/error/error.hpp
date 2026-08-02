@@ -125,7 +125,10 @@ namespace ndof::error {
         FileName<Allocator>               file_name; 
         FunctionName<Allocator>           function_name;
         std::uint_least32_t               line;
-        std::optional<std::exception_ptr> inner_exception;
+
+        // TODO: Research what happens when moving this.  
+        //       There is a std::exception_ptr type, but it is not copyable.  It is only moveable.
+        std::optional<std::exception_ptr> captured_exception;
         BuildMode                         build_mode;
     };
 
