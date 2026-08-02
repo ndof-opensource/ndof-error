@@ -294,6 +294,7 @@ namespace ndof::error {
 
 
     // TODO: Move this to a separate include file under a details folder, and make it a private implementation detail of the ndof::error library.
+    //--------------------------------------------------------------------I don't know what this means above.
     namespace detail {
 
         [[nodiscard]] inline std::string_view build_mode_to_string(const BuildMode mode) noexcept {
