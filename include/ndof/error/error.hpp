@@ -340,9 +340,10 @@ namespace ndof::error {
     template<typename OtherAllocator>
     ConditionCheckException<Allocator>::ConditionCheckException(
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression_value,
-        const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message_value,
         const std::source_location& location,
+        const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
           CheckMode check_mode_value,
+          // TODO: Make sure this has a default parameter value.
           const Allocator& allocator)
         : Exception<Allocator>(
               FileName<Allocator>{allocated_string(location.file_name(), allocator)},
@@ -351,7 +352,7 @@ namespace ndof::error {
               static_cast<BuildMode>(check_mode_value),
               allocator),
             expression(expression_value.c_str(), allocator),
-            message(message_value.c_str(), allocator),
+            message(message.c_str(), allocator),
           check_mode(check_mode_value) {
     }
 
