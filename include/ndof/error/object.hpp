@@ -81,45 +81,105 @@ public:
           attributes_(attribute_allocator(allocator)) {
     }
 
-    basic_object(std::allocator_arg_t allocator_tag, const allocator_type& allocator)
+    basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator)
         : basic_object(allocator) {
-        (void)allocator_tag;
     }
 
     basic_object(const basic_object& other)
         : basic_object(std::allocator_arg, other.get_allocator(), other) {
     }
 
-    basic_object(std::allocator_arg_t allocator_tag, const allocator_type& allocator, const basic_object& other)
+    template<typename OtherAllocator>
+    requires (!std::is_same_v<OtherAllocator, allocator_type>)
+    basic_object(const basic_object<OtherAllocator>& other)
+        : basic_object(std::allocator_arg, allocator_type(), other) {
+    }
+
+        basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator, const basic_object& other)
         : allocator_(allocator),
-          type_(other.type_),
-          name_(other.name_, char_allocator(allocator)),
-          scalar_(clone_scalar(other.scalar_, allocator)),
-          members_(other.members_.begin(), other.members_.end(), member_allocator(allocator)),
-          elements_(other.elements_.begin(), other.elements_.end(), child_allocator(allocator)),
-          children_(other.children_.begin(), other.children_.end(), child_allocator(allocator)),
-          attributes_(other.attributes_.begin(), other.attributes_.end(), attribute_allocator(allocator)) {
-        (void)allocator_tag;
+          name_(char_allocator(allocator)),
+          members_(member_allocator(allocator)),
+          elements_(child_allocator(allocator)),
+          children_(child_allocator(allocator)),
+          attributes_(attribute_allocator(allocator)) {
+        copy_from_other(other);
+    }
+
+    template<typename OtherAllocator>
+    requires (!std::is_same_v<OtherAllocator, allocator_type>)
+    basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator, const basic_object<OtherAllocator>& other)
+        : allocator_(allocator),
+          name_(char_allocator(allocator)),
+          members_(member_allocator(allocator)),
+          elements_(child_allocator(allocator)),
+          children_(child_allocator(allocator)),
+          attributes_(attribute_allocator(allocator)) {
+        copy_from_other(other);
     }
 
     basic_object(basic_object&& other) noexcept
         : basic_object(std::allocator_arg, other.get_allocator(), std::move(other)) {
     }
 
-    basic_object(std::allocator_arg_t allocator_tag, const allocator_type& allocator, basic_object&& other)
-        : allocator_(allocator),
-          type_(other.type_),
-          name_(std::move(other.name_), char_allocator(allocator)),
-          scalar_(move_scalar(std::move(other.scalar_), allocator)),
-          members_(std::make_move_iterator(other.members_.begin()), std::make_move_iterator(other.members_.end()), member_allocator(allocator)),
-          elements_(std::make_move_iterator(other.elements_.begin()), std::make_move_iterator(other.elements_.end()), child_allocator(allocator)),
-          children_(std::make_move_iterator(other.children_.begin()), std::make_move_iterator(other.children_.end()), child_allocator(allocator)),
-          attributes_(std::make_move_iterator(other.attributes_.begin()), std::make_move_iterator(other.attributes_.end()), attribute_allocator(allocator)) {
-        (void)allocator_tag;
+    template<typename OtherAllocator>
+    requires (!std::is_same_v<OtherAllocator, allocator_type>)
+    basic_object(basic_object<OtherAllocator>&& other)
+        : basic_object(std::allocator_arg, allocator_type(), std::move(other)) {
     }
 
-    basic_object& operator=(const basic_object&) = default;
-    basic_object& operator=(basic_object&&) = default;
+        basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator, basic_object&& other)
+        : allocator_(allocator),
+          name_(char_allocator(allocator)),
+          members_(member_allocator(allocator)),
+          elements_(child_allocator(allocator)),
+          children_(child_allocator(allocator)),
+          attributes_(attribute_allocator(allocator)) {
+        move_from_other(std::move(other));
+    }
+
+    template<typename OtherAllocator>
+    requires (!std::is_same_v<OtherAllocator, allocator_type>)
+    basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator, basic_object<OtherAllocator>&& other)
+        : allocator_(allocator),
+          name_(char_allocator(allocator)),
+          members_(member_allocator(allocator)),
+          elements_(child_allocator(allocator)),
+          children_(child_allocator(allocator)),
+          attributes_(attribute_allocator(allocator)) {
+        move_from_other(std::move(other));
+    }
+
+    basic_object& operator=(const basic_object& other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        copy_from_other(other);
+        return *this;
+    }
+
+    template<typename OtherAllocator>
+    requires (!std::is_same_v<OtherAllocator, allocator_type>)
+    basic_object& operator=(const basic_object<OtherAllocator>& other) {
+        copy_from_other(other);
+        return *this;
+    }
+
+    basic_object& operator=(basic_object&& other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        move_from_other(std::move(other));
+        return *this;
+    }
+
+    template<typename OtherAllocator>
+    requires (!std::is_same_v<OtherAllocator, allocator_type>)
+    basic_object& operator=(basic_object<OtherAllocator>&& other) {
+        move_from_other(std::move(other));
+        return *this;
+    }
 
     [[nodiscard]] static basic_object null_value(const allocator_type& allocator = allocator_type()) {
         return basic_object(kind::null_value, allocator);
@@ -248,6 +308,34 @@ public:
         return *this;
     }
 
+    template<typename OtherAllocator>
+    basic_object& add_member(std::string_view key, basic_object<OtherAllocator> value) {
+        ensure_kind(kind::mapping);
+        members_.emplace_back(allocated_string(key, char_allocator(allocator_)), normalize_value(std::move(value)));
+        return *this;
+    }
+
+    template<typename OtherAllocator>
+    basic_object& add_element(basic_object<OtherAllocator> value) {
+        ensure_kind(kind::sequence);
+        elements_.push_back(normalize_value(std::move(value)));
+        return *this;
+    }
+
+    template<typename OtherAllocator>
+    basic_object& add_child(basic_object<OtherAllocator> value) {
+        ensure_kind(kind::element);
+        children_.push_back(normalize_value(std::move(value)));
+        return *this;
+    }
+
+    template<typename OtherAllocator>
+    basic_object& add_attribute(std::string_view key, basic_object<OtherAllocator> value) {
+        ensure_kind(kind::element);
+        attributes_.emplace_back(allocated_string(key, char_allocator(allocator_)), normalize_value(std::move(value)));
+        return *this;
+    }
+
 private:
     explicit basic_object(kind value, const allocator_type& allocator = allocator_type())
                 : allocator_(allocator),
@@ -285,10 +373,163 @@ private:
             std::move(scalar));
     }
 
+    template<typename OtherAllocator>
+    [[nodiscard]] static scalar_type clone_scalar(
+        const typename basic_object<OtherAllocator>::scalar_type& scalar,
+        const allocator_type& allocator) {
+        return std::visit(
+            [&allocator](const auto& value) -> scalar_type {
+                using value_type = std::decay_t<decltype(value)>;
+                using other_string = typename basic_object<OtherAllocator>::allocated_string;
+                if constexpr (std::is_same_v<value_type, other_string>) {
+                    return scalar_type(std::in_place_type<allocated_string>, value.c_str(), char_allocator(allocator));
+                } else {
+                    return scalar_type(value);
+                }
+            },
+            scalar);
+    }
+
+    template<typename OtherAllocator>
+    [[nodiscard]] static scalar_type move_scalar(
+        typename basic_object<OtherAllocator>::scalar_type&& scalar,
+        const allocator_type& allocator) {
+        return std::visit(
+            [&allocator](auto&& value) -> scalar_type {
+                using value_type = std::decay_t<decltype(value)>;
+                using other_string = typename basic_object<OtherAllocator>::allocated_string;
+                if constexpr (std::is_same_v<value_type, other_string>) {
+                    return scalar_type(
+                        std::in_place_type<allocated_string>,
+                        std::forward<value_type>(value),
+                        char_allocator(allocator));
+                } else {
+                    return scalar_type(std::forward<value_type>(value));
+                }
+            },
+            std::move(scalar));
+    }
+
     // Rebinds an incoming node to this object's allocator so child/member storage
     // stays allocator-consistent even when values are created with a different allocator.
     [[nodiscard]] basic_object normalize_value(basic_object&& value) const {
+        if (allocators_equal(allocator_, value.get_allocator())) {
+            return std::move(value);
+        }
+        // TODO: Check this. If the allocators are not equal, we need to rebind the value to this object's allocator.
+        // and deallocate it from the original allocator.  This needs to be a deep copy of the value, and all of its children, members, and attributes.
         return basic_object(std::allocator_arg, allocator_, std::move(value));
+    }
+
+    template<typename OtherAllocator>
+    [[nodiscard]] basic_object normalize_value(const basic_object<OtherAllocator>& value) const {
+        return basic_object(std::allocator_arg, allocator_, value);
+    }
+
+    template<typename OtherAllocator>
+    [[nodiscard]] basic_object normalize_value(basic_object<OtherAllocator>&& value) const {
+        return basic_object(std::allocator_arg, allocator_, std::move(value));
+    }
+
+    template<typename OtherAllocator>
+    void copy_from_other(const basic_object<OtherAllocator>& other) {
+        type_ = other.type_;
+        name_ = allocated_string(other.name_, char_allocator(allocator_));
+        scalar_ = clone_scalar<OtherAllocator>(other.scalar_, allocator_);
+
+        member_container rebound_members{member_allocator(allocator_)};
+        rebound_members.reserve(other.members_.size());
+        for (const auto& [key, value] : other.members_) {
+            rebound_members.emplace_back(
+                allocated_string(key, char_allocator(allocator_)),
+                basic_object(std::allocator_arg, allocator_, value));
+        }
+
+        child_container rebound_elements{child_allocator(allocator_)};
+        rebound_elements.reserve(other.elements_.size());
+        for (const auto& value : other.elements_) {
+            rebound_elements.push_back(basic_object(std::allocator_arg, allocator_, value));
+        }
+
+        child_container rebound_children{child_allocator(allocator_)};
+        rebound_children.reserve(other.children_.size());
+        for (const auto& value : other.children_) {
+            rebound_children.push_back(basic_object(std::allocator_arg, allocator_, value));
+        }
+
+        attribute_container rebound_attributes{attribute_allocator(allocator_)};
+        rebound_attributes.reserve(other.attributes_.size());
+        for (const auto& [key, value] : other.attributes_) {
+            rebound_attributes.emplace_back(
+                allocated_string(key, char_allocator(allocator_)),
+                basic_object(std::allocator_arg, allocator_, value));
+        }
+
+        members_ = std::move(rebound_members);
+        elements_ = std::move(rebound_elements);
+        children_ = std::move(rebound_children);
+        attributes_ = std::move(rebound_attributes);
+    }
+
+    template<typename OtherAllocator>
+    void move_from_other(basic_object<OtherAllocator>&& other) {
+        if constexpr (std::is_same_v<OtherAllocator, allocator_type>) {
+            if (allocators_equal(allocator_, other.allocator_)) {
+                type_ = other.type_;
+                name_ = std::move(other.name_);
+                scalar_ = std::move(other.scalar_);
+                members_ = std::move(other.members_);
+                elements_ = std::move(other.elements_);
+                children_ = std::move(other.children_);
+                attributes_ = std::move(other.attributes_);
+                return;
+            }
+        }
+
+        type_ = other.type_;
+        name_ = allocated_string(std::move(other.name_), char_allocator(allocator_));
+        scalar_ = move_scalar<OtherAllocator>(std::move(other.scalar_), allocator_);
+
+        member_container rebound_members{member_allocator(allocator_)};
+        rebound_members.reserve(other.members_.size());
+        for (auto& [key, value] : other.members_) {
+            rebound_members.emplace_back(
+                allocated_string(std::move(key), char_allocator(allocator_)),
+                basic_object(std::allocator_arg, allocator_, std::move(value)));
+        }
+
+        child_container rebound_elements{child_allocator(allocator_)};
+        rebound_elements.reserve(other.elements_.size());
+        for (auto& value : other.elements_) {
+            rebound_elements.push_back(basic_object(std::allocator_arg, allocator_, std::move(value)));
+        }
+
+        child_container rebound_children{child_allocator(allocator_)};
+        rebound_children.reserve(other.children_.size());
+        for (auto& value : other.children_) {
+            rebound_children.push_back(basic_object(std::allocator_arg, allocator_, std::move(value)));
+        }
+
+        attribute_container rebound_attributes{attribute_allocator(allocator_)};
+        rebound_attributes.reserve(other.attributes_.size());
+        for (auto& [key, value] : other.attributes_) {
+            rebound_attributes.emplace_back(
+                allocated_string(std::move(key), char_allocator(allocator_)),
+                basic_object(std::allocator_arg, allocator_, std::move(value)));
+        }
+
+        members_ = std::move(rebound_members);
+        elements_ = std::move(rebound_elements);
+        children_ = std::move(rebound_children);
+        attributes_ = std::move(rebound_attributes);
+    }
+
+    [[nodiscard]] static bool allocators_equal(const allocator_type& lhs, const allocator_type& rhs) {
+        if constexpr (requires(const allocator_type& a, const allocator_type& b) { a == b; }) {
+            return lhs == rhs;
+        } else {
+            return false;
+        }
     }
 
     void ensure_kind(kind expected) {
@@ -309,6 +550,9 @@ private:
     child_container elements_;
     child_container children_;
     attribute_container attributes_;
+
+    template<typename>
+    friend class basic_object;
 };
 
 using object = basic_object<>;

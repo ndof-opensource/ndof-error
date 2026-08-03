@@ -73,6 +73,27 @@ Object build_commented_mapping_document(const typename Object::allocator_type& a
     return document;
 }
 
+template<typename Object>
+void expect_tree_allocator(const Object& node, const typename Object::allocator_type& expected_allocator) {
+    EXPECT_EQ(node.get_allocator(), expected_allocator);
+
+    for (const auto& [_, value] : node.members()) {
+        expect_tree_allocator(value, expected_allocator);
+    }
+
+    for (const auto& value : node.elements()) {
+        expect_tree_allocator(value, expected_allocator);
+    }
+
+    for (const auto& value : node.children()) {
+        expect_tree_allocator(value, expected_allocator);
+    }
+
+    for (const auto& [_, value] : node.attributes()) {
+        expect_tree_allocator(value, expected_allocator);
+    }
+}
+
 TEST(ObjectQuery, ResolvesRepeatedXmlChildrenByCompileTimePath) {
     const ndof::object document = build_xml_like_document<ndof::object>();
 
@@ -156,6 +177,31 @@ TEST(ObjectQuery, PreservesCommentsWithoutShiftingSequenceIndices) {
     const auto* comment = users.elements()[1].as_comment();
     ASSERT_NE(comment, nullptr);
     EXPECT_EQ(*comment, "between users");
+}
+
+TEST(ObjectAllocator, MoveAcrossDifferentPmrResourcesRebindsWholeTree) {
+    std::array<std::byte, 4096> source_storage{};
+    std::array<std::byte, 4096> destination_storage{};
+    std::pmr::monotonic_buffer_resource source_resource(source_storage.data(), source_storage.size());
+    std::pmr::monotonic_buffer_resource destination_resource(destination_storage.data(), destination_storage.size());
+
+    using allocator_type = std::pmr::polymorphic_allocator<std::byte>;
+    using object_type = ndof::basic_object<allocator_type>;
+
+    const allocator_type source_allocator(&source_resource);
+    const allocator_type destination_allocator(&destination_resource);
+    object_type source = build_xml_like_document<object_type>(source_allocator);
+
+    const object_type moved(std::allocator_arg, destination_allocator, std::move(source));
+
+    EXPECT_EQ(moved.get_allocator(), destination_allocator);
+    expect_tree_allocator(moved, destination_allocator);
+
+    const object_type* title = ndof::find_first<"/catalog/book[2]/title">(moved);
+    ASSERT_NE(title, nullptr);
+    const auto* value = title->children().front().as_string();
+    ASSERT_NE(value, nullptr);
+    EXPECT_EQ(*value, "Second");
 }
 
 } // namespace
