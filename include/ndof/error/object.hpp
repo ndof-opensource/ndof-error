@@ -277,9 +277,9 @@ private:
             [&allocator](auto&& value) -> scalar_type {
                 using value_type = std::decay_t<decltype(value)>;
                 if constexpr (std::is_same_v<value_type, allocated_string>) {
-                    return scalar_type(std::in_place_type<allocated_string>, std::move(value), char_allocator(allocator));
+                    return scalar_type(std::in_place_type<allocated_string>, std::forward<value_type>(value), char_allocator(allocator));
                 } else {
-                    return scalar_type(std::move(value));
+                    return scalar_type(std::forward<value_type>(value));
                 }
             },
             std::move(scalar));

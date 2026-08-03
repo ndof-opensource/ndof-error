@@ -76,11 +76,13 @@ namespace ndof::error {
             std::uint_least32_t line,
                         BuildMode build_mode,
                         const Allocator& allocator = Allocator())
-                        : message(allocator),
-                            file_name{allocated_string(file_name.value.c_str(), allocator)},
+                        :   file_name{allocated_string(file_name.value.c_str(), allocator)},
                             function_name{allocated_string(function_name.value.c_str(), allocator)},
                             line(line),
                             build_mode(build_mode) {}
+
+        // TODO: Fix all constructors to properly copy and move the inner exception pointer properly, and to properly copy and move the message string.
+        // TODO: Templatize to support OtherAllocator types, and to support other exception types.
         Exception(const Exception&) = default;
         Exception(Exception&&) = default;
         Exception& operator=(const Exception&) = default;
@@ -89,13 +91,7 @@ namespace ndof::error {
         ~Exception() = default;
         [[nodiscard]] const char* what() const noexcept override;
 
-        // TODO: Make available only in builds where exceptions are enabled.
-        void rethrow() const{
-            if (! this->inner_exception.has_value()) {
-                throw std::runtime_error("No inner exception to rethrow.");
-            }
-            std::rethrow_exception(this->inner_exception.value());
-        }
+
 
         public:
         [[nodiscard]] const allocated_string& get_file_name() const noexcept {
@@ -120,8 +116,8 @@ namespace ndof::error {
         }
 
         private:
-        // TODO: Remove this, or replace it with an ndof::object type.
-        mutable allocated_string message;
+            mutable allocated_string message;
+
         FileName<Allocator>               file_name; 
         FunctionName<Allocator>           function_name;
         std::uint_least32_t               line;
@@ -132,8 +128,64 @@ namespace ndof::error {
         BuildMode                         build_mode;
     };
 
-    template<typename Allocator = std::allocator<char>>
-    struct ConditionCheckException : Exception<Allocator> {
+        template<typename Allocator = std::allocator<char>>
+    struct InnerException : Exception<Allocator> {
+
+ 
+        using allocated_string 
+           = std::basic_string<char, std::char_traits<char>, Allocator>;
+
+        explicit InnerException(const Allocator& allocator = Allocator())
+            : Exception<Allocator>(allocator) {
+        }
+
+        template<typename CapturedException>
+        // Question: Is same or is derived from instead? 
+        requires (!std::is_same_v<std::remove_cvref_t<CapturedException>, InnerException<Allocator>>)
+        explicit InnerException(CapturedException&& exception, const Allocator& allocator = Allocator())
+        // Note: Didn't know about std::make_exception_ptr.
+            : Exception<Allocator>(allocator),
+              captured_exception(std::make_exception_ptr(std::forward<CapturedException>(exception))) {
+        }
+
+        InnerException(const InnerException&) = default;
+        InnerException(InnerException&&) = default;
+        InnerException& operator=(const InnerException&) = default;
+        InnerException& operator=(InnerException&&) = default;
+        ~InnerException() = default;
+
+        [[nodiscard]] const char* what() const noexcept override;
+
+    protected:
+        [[nodiscard]] const std::exception_ptr& get_captured_exception() const noexcept {
+            return captured_exception;
+        }
+
+    private:
+        std::exception_ptr captured_exception;
+    };
+
+    template<typename ExceptionType, typename Allocator = std::allocator<char>>
+    struct ExplicitInnerException : InnerException<Allocator> {
+
+        explicit ExplicitInnerException(const Allocator& allocator = Allocator())
+            : InnerException<Allocator>(allocator) {
+        }
+
+        // Note: This was added to dismiss a clang-tidy warning about not properly moving
+        //       exception before forwarding it to the base class constructor.
+        template<typename ForwardedException>
+        requires std::is_same_v<std::remove_cvref_t<ForwardedException>, ExceptionType>
+        explicit ExplicitInnerException(
+            ForwardedException&& exception,
+            const Allocator& allocator = Allocator())
+            : InnerException<Allocator>(std::forward<ForwardedException>(exception), allocator) {
+        }
+
+    };
+
+    template<typename ExceptionType, typename Allocator = std::allocator<char>>
+    struct ConditionCheckException : ExplicitInnerException<ExceptionType, Allocator> {
         using allocated_string 
            = std::basic_string<char, std::char_traits<char>, Allocator>;
 
@@ -174,8 +226,8 @@ namespace ndof::error {
         CheckMode check_mode;
     };
      
-    template<typename Allocator = std::allocator<char>>
-    struct PreConditionCheckException : ConditionCheckException<Allocator> {
+    template<typename ExceptionType, typename Allocator = std::allocator<char>>
+    struct PreConditionCheckException : ConditionCheckException<ExceptionType, Allocator> {
         PreConditionCheckException() = default;
         PreConditionCheckException(const PreConditionCheckException&) = default;
         PreConditionCheckException(PreConditionCheckException&&) = default;
@@ -195,8 +247,8 @@ namespace ndof::error {
         [[nodiscard]] const char* what() const noexcept override;
     };
 
-    template<typename Allocator = std::allocator<char>>
-    struct PostConditionCheckException : ConditionCheckException<Allocator> {
+    template<typename ExceptionType, typename Allocator = std::allocator<char>>
+    struct PostConditionCheckException : ConditionCheckException<ExceptionType, Allocator> {
         PostConditionCheckException() = default;
         PostConditionCheckException(const PostConditionCheckException&) = default;
         PostConditionCheckException(PostConditionCheckException&&) = default;
@@ -213,8 +265,8 @@ namespace ndof::error {
         );
     };
 
-    template<typename Allocator = std::allocator<char>>
-    struct InvariantConditionCheckException : ConditionCheckException<Allocator> {
+    template<typename ExceptionType, typename Allocator = std::allocator<char>>
+    struct InvariantConditionCheckException : ConditionCheckException<ExceptionType, Allocator> {
         InvariantConditionCheckException() = default;
         InvariantConditionCheckException(const InvariantConditionCheckException&) = default;
         InvariantConditionCheckException(InvariantConditionCheckException&&) = default;
@@ -233,66 +285,32 @@ namespace ndof::error {
         [[nodiscard]] const char* what() const noexcept override;
     };
 
-    template<typename Allocator = std::allocator<char>>
-    struct InnerException : Exception<Allocator> {
+    namespace detail {
+        template<typename A>
+        std::true_type inner_exception_probe(const InnerException<A>*);
 
- 
-        using allocated_string 
-           = std::basic_string<char, std::char_traits<char>, Allocator>;
+        std::false_type inner_exception_probe(...);
 
-        explicit InnerException(const Allocator& allocator = Allocator())
-            : Exception<Allocator>(allocator) {
-        }
+        template<typename T>
+        concept inner_exception_derived =
+            decltype(inner_exception_probe(std::declval<const std::remove_cvref_t<T>*>()))::value;
+    }
 
-        template<typename CapturedException>
-        // Question: Is same or is derived from instead? 
-        requires (!std::is_same_v<std::remove_cvref_t<CapturedException>, InnerException<Allocator>>)
-        explicit InnerException(CapturedException&& exception, const Allocator& allocator = Allocator())
-        // Note: Didn't know about std::make_exception_ptr.
-            : Exception<Allocator>(allocator),
-              captured_exception(std::make_exception_ptr(std::forward<CapturedException>(exception))) {
-        }
 
-        InnerException(const InnerException&) = default;
-        InnerException(InnerException&&) = default;
-        InnerException& operator=(const InnerException&) = default;
-        InnerException& operator=(InnerException&&) = default;
-        ~InnerException() = default;
-
-        [[nodiscard]] const char* what() const noexcept override;
-
-    protected:
-        [[nodiscard]] const std::exception_ptr& get_captured_exception() const noexcept {
-            return captured_exception;
-        }
-
-    private:
-        std::exception_ptr captured_exception;
-    };
-
-    template<typename ExceptionType, typename Allocator = std::allocator<char>>
-    struct ExplicitInnerException : InnerException<Allocator> {
-
-        // Note: This was added to dismiss a clang-tidy warning about not properly moving
-        //       exception before forwarding it to the base class constructor.
-        template<typename ForwardedException>
-        requires std::is_same_v<std::remove_cvref_t<ForwardedException>, ExceptionType>
-        explicit ExplicitInnerException(
-            ForwardedException&& exception,
-            const Allocator& allocator = Allocator())
-            : InnerException<Allocator>(std::forward<ForwardedException>(exception), allocator) {
-        }
-
-    };
 
     template<typename ExceptionType, typename Allocator = std::allocator<char>>
     void throw_ndof_exception(
         ExceptionType&& exception,
         const Allocator& allocator = Allocator()) {
+        
         using captured_exception_type = std::remove_cvref_t<ExceptionType>;
-        throw ExplicitInnerException<captured_exception_type, Allocator>(
-            std::forward<ExceptionType>(exception),
-            allocator);
+        if constexpr (detail::inner_exception_derived<captured_exception_type>) {
+            throw std::forward<ExceptionType>(exception);
+        } else {
+            throw ExplicitInnerException<captured_exception_type, Allocator>(
+                std::forward<ExceptionType>(exception),
+                allocator);
+        }
     }
 
 
@@ -339,72 +357,68 @@ namespace ndof::error {
         return message.c_str();
     }
 
-    template<typename Allocator>
+        template<typename ExceptionType, typename Allocator>
     template<typename OtherAllocator>
-    ConditionCheckException<Allocator>::ConditionCheckException(
+        ConditionCheckException<ExceptionType, Allocator>::ConditionCheckException(
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression_value,
-        const std::source_location& location,
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
+                const std::source_location& location,
           CheckMode check_mode_value,
           // TODO: Make sure this has a default parameter value.
           const Allocator& allocator)
-        : Exception<Allocator>(
-              FileName<Allocator>{allocated_string(location.file_name(), allocator)},
-              FunctionName<Allocator>{allocated_string(location.function_name(), allocator)},
-              static_cast<std::uint_least32_t>(location.line()),
-              static_cast<BuildMode>(check_mode_value),
-              allocator),
+                : ExplicitInnerException<ExceptionType, Allocator>(allocator),
             expression(expression_value.c_str(), allocator),
             message(message.c_str(), allocator),
           check_mode(check_mode_value) {
+                (void)location;
     }
 
-    template<typename Allocator>
-    const char* ConditionCheckException<Allocator>::what() const noexcept {
+    template<typename ExceptionType, typename Allocator>
+    const char* ConditionCheckException<ExceptionType, Allocator>::what() const noexcept {
         return Exception<Allocator>::what();
     }
 
-    template<typename Allocator>
+    template<typename ExceptionType, typename Allocator>
     template<typename OtherAllocator>
-    PreConditionCheckException<Allocator>::PreConditionCheckException(
+    PreConditionCheckException<ExceptionType, Allocator>::PreConditionCheckException(
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
         const std::source_location& location,
         CheckMode check_mode,
         const Allocator& allocator)
-        : ConditionCheckException<Allocator>(expression, message, location, check_mode, allocator) {
+        : ConditionCheckException<ExceptionType, Allocator>(expression, message, location, check_mode, allocator) {
     }
 
-    template<typename Allocator>
-    const char* PreConditionCheckException<Allocator>::what() const noexcept {
-        return ConditionCheckException<Allocator>::what();
+    template<typename ExceptionType, typename Allocator>
+    const char* PreConditionCheckException<ExceptionType, Allocator>::what() const noexcept {
+        return ConditionCheckException<ExceptionType, Allocator>::what();
     }
 
-    template<typename Allocator>
+    template<typename ExceptionType, typename Allocator>
     template<typename OtherAllocator>
-    PostConditionCheckException<Allocator>::PostConditionCheckException(
+    PostConditionCheckException<ExceptionType, Allocator>::PostConditionCheckException(
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
         const std::source_location& location,
         CheckMode check_mode,
         const Allocator& allocator)
-        : ConditionCheckException<Allocator>(expression, message, location, check_mode, allocator) {
+        : ConditionCheckException<ExceptionType, Allocator>(expression, message, location, check_mode, allocator) {
     }
 
-    template<typename Allocator>
+    template<typename ExceptionType, typename Allocator>
     template<typename OtherAllocator>
-    InvariantConditionCheckException<Allocator>::InvariantConditionCheckException(
+    InvariantConditionCheckException<ExceptionType, Allocator>::InvariantConditionCheckException(
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& expression,
         const std::basic_string<char, std::char_traits<char>, OtherAllocator>& message,
         const std::source_location& location,
         CheckMode check_mode,
         const Allocator& allocator)
-        : ConditionCheckException<Allocator>(expression, message, location, check_mode, allocator) {
+        : ConditionCheckException<ExceptionType, Allocator>(expression, message, location, check_mode, allocator) {
     }
 
-    template<typename Allocator>
-    const char* InvariantConditionCheckException<Allocator>::what() const noexcept {
-        return ConditionCheckException<Allocator>::what();
+    template<typename ExceptionType, typename Allocator>
+    const char* InvariantConditionCheckException<ExceptionType, Allocator>::what() const noexcept {
+        return ConditionCheckException<ExceptionType, Allocator>::what();
     }
 
     template<typename Allocator>
