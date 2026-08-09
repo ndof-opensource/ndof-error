@@ -114,7 +114,6 @@ requires (!allocator_aware_move_propagating<std::remove_cvref_t<T>>)
 }
 
 template<typename CharT, typename Traits, allocator_for<CharT> SourceAllocator, allocator_for<CharT> DestinationAllocator>
-requires allocator_for<SourceAllocator, CharT> && allocator_for<DestinationAllocator, CharT>
 [[nodiscard]] std::basic_string<CharT, Traits, DestinationAllocator> copy_considering_allocators(
     const std::basic_string<CharT, Traits, SourceAllocator>& value,
     const DestinationAllocator& allocator) {
@@ -122,7 +121,6 @@ requires allocator_for<SourceAllocator, CharT> && allocator_for<DestinationAlloc
 }
 
 template<typename CharT, typename Traits, allocator_for<CharT> SourceAllocator, allocator_for<CharT> DestinationAllocator>
-requires allocator_for<SourceAllocator, CharT> && allocator_for<DestinationAllocator, CharT>
 [[nodiscard]] std::basic_string<CharT, Traits, DestinationAllocator> move_considering_allocators(
     std::basic_string<CharT, Traits, SourceAllocator>&& value,
     const DestinationAllocator& allocator) {
