@@ -146,7 +146,7 @@ TEST(ObjectQuery, ResolvesPathsForPmrAllocatorBackedObjects) {
     std::array<std::byte, 4096> storage{};
     std::pmr::monotonic_buffer_resource resource(storage.data(), storage.size());
     using allocator_type = std::pmr::polymorphic_allocator<std::byte>;
-    using object_type = ndof::basic_object<allocator_type>;
+    using object_type = ndof::basic_object<char, allocator_type>;
 
     const allocator_type allocator(&resource);
     const object_type document = build_mapping_document<object_type>(allocator);
@@ -186,7 +186,7 @@ TEST(ObjectAllocator, MoveAcrossDifferentPmrResourcesRebindsWholeTree) {
     std::pmr::monotonic_buffer_resource destination_resource(destination_storage.data(), destination_storage.size());
 
     using allocator_type = std::pmr::polymorphic_allocator<std::byte>;
-    using object_type = ndof::basic_object<allocator_type>;
+    using object_type = ndof::basic_object<char, allocator_type>;
 
     const allocator_type source_allocator(&source_resource);
     const allocator_type destination_allocator(&destination_resource);
@@ -202,6 +202,34 @@ TEST(ObjectAllocator, MoveAcrossDifferentPmrResourcesRebindsWholeTree) {
     const auto* value = title->children().front().as_string();
     ASSERT_NE(value, nullptr);
     EXPECT_EQ(*value, "Second");
+}
+
+TEST(ObjectQuery, ResolvesPathsForWideCharacterObjects) {
+    using object_type = ndof::basic_object<wchar_t, std::allocator<std::byte>>;
+
+    object_type catalog = object_type::element(L"catalog");
+
+    object_type first_book = object_type::element(L"book");
+    object_type first_title = object_type::element(L"title");
+    first_title.add_child(object_type::string(L"First"));
+    first_book.add_child(std::move(first_title));
+
+    object_type second_book = object_type::element(L"book");
+    object_type second_title = object_type::element(L"title");
+    second_title.add_child(object_type::string(L"Second"));
+    second_book.add_child(std::move(second_title));
+
+    catalog.add_child(std::move(first_book));
+    catalog.add_child(std::move(second_book));
+    const object_type document = std::move(catalog);
+
+    const object_type* title = ndof::find_first<"/catalog/book[2]/title">(document);
+    ASSERT_NE(title, nullptr);
+    ASSERT_EQ(title->children().size(), 1U);
+
+    const auto* value = title->children().front().as_string();
+    ASSERT_NE(value, nullptr);
+    EXPECT_EQ(*value, L"Second");
 }
 
 } // namespace

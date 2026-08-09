@@ -37,13 +37,14 @@ struct fixed_string {
 template<std::size_t N>
 fixed_string(const char (&)[N]) -> fixed_string<N>;
 
-template<typename Allocator = std::allocator<std::byte>>
+template<typename CharT = char, typename Allocator = std::allocator<std::byte>>
 class basic_object {
 public:
     using allocator_type = Allocator;
     using allocator_traits = std::allocator_traits<allocator_type>;
-    using char_allocator = typename allocator_traits::template rebind_alloc<char>;
-    using allocated_string = std::basic_string<char, std::char_traits<char>, char_allocator>;
+    using char_allocator = typename allocator_traits::template rebind_alloc<CharT>;
+    using allocated_string = std::basic_string<CharT, std::char_traits<CharT>, char_allocator>;
+    using string_view_type = std::basic_string_view<CharT>;
 
     enum class kind : std::uint8_t {
         null_value,
@@ -91,7 +92,7 @@ public:
 
     template<typename OtherAllocator>
     requires (!std::is_same_v<OtherAllocator, allocator_type>)
-    basic_object(const basic_object<OtherAllocator>& other)
+    basic_object(const basic_object<CharT, OtherAllocator>& other)
         : basic_object(std::allocator_arg, allocator_type(), other) {
     }
 
@@ -107,7 +108,7 @@ public:
 
     template<typename OtherAllocator>
     requires (!std::is_same_v<OtherAllocator, allocator_type>)
-    basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator, const basic_object<OtherAllocator>& other)
+        basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator, const basic_object<CharT, OtherAllocator>& other)
         : allocator_(allocator),
           name_(char_allocator(allocator)),
           members_(member_allocator(allocator)),
@@ -123,7 +124,7 @@ public:
 
     template<typename OtherAllocator>
     requires (!std::is_same_v<OtherAllocator, allocator_type>)
-    basic_object(basic_object<OtherAllocator>&& other)
+    basic_object(basic_object<CharT, OtherAllocator>&& other)
         : basic_object(std::allocator_arg, allocator_type(), std::move(other)) {
     }
 
@@ -139,7 +140,7 @@ public:
 
     template<typename OtherAllocator>
     requires (!std::is_same_v<OtherAllocator, allocator_type>)
-    basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator, basic_object<OtherAllocator>&& other)
+        basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator, basic_object<CharT, OtherAllocator>&& other)
         : allocator_(allocator),
           name_(char_allocator(allocator)),
           members_(member_allocator(allocator)),
@@ -160,7 +161,7 @@ public:
 
     template<typename OtherAllocator>
     requires (!std::is_same_v<OtherAllocator, allocator_type>)
-    basic_object& operator=(const basic_object<OtherAllocator>& other) {
+    basic_object& operator=(const basic_object<CharT, OtherAllocator>& other) {
         copy_from_other(other);
         return *this;
     }
@@ -176,7 +177,7 @@ public:
 
     template<typename OtherAllocator>
     requires (!std::is_same_v<OtherAllocator, allocator_type>)
-    basic_object& operator=(basic_object<OtherAllocator>&& other) {
+    basic_object& operator=(basic_object<CharT, OtherAllocator>&& other) {
         move_from_other(std::move(other));
         return *this;
     }
@@ -185,13 +186,13 @@ public:
         return basic_object(kind::null_value, allocator);
     }
 
-    [[nodiscard]] static basic_object string(std::string_view value, const allocator_type& allocator = allocator_type()) {
+    [[nodiscard]] static basic_object string(string_view_type value, const allocator_type& allocator = allocator_type()) {
         basic_object result(kind::string, allocator);
         result.scalar_ = allocated_string(value, char_allocator(allocator));
         return result;
     }
 
-    [[nodiscard]] static basic_object comment(std::string_view value, const allocator_type& allocator = allocator_type()) {
+    [[nodiscard]] static basic_object comment(string_view_type value, const allocator_type& allocator = allocator_type()) {
         basic_object result(kind::comment, allocator);
         result.scalar_ = allocated_string(value, char_allocator(allocator));
         return result;
@@ -223,7 +224,7 @@ public:
         return basic_object(kind::sequence, allocator);
     }
 
-    [[nodiscard]] static basic_object element(std::string_view name, const allocator_type& allocator = allocator_type()) {
+    [[nodiscard]] static basic_object element(string_view_type name, const allocator_type& allocator = allocator_type()) {
         basic_object result(kind::element, allocator);
         result.name_ = allocated_string(name, char_allocator(allocator));
         return result;
@@ -284,7 +285,7 @@ public:
         return std::get_if<bool>(&scalar_);
     }
 
-    basic_object& add_member(std::string_view key, basic_object value) {
+    basic_object& add_member(string_view_type key, basic_object value) {
         ensure_kind(kind::mapping);
         members_.emplace_back(allocated_string(key, char_allocator(allocator_)), normalize_value(std::move(value)));
         return *this;
@@ -302,35 +303,35 @@ public:
         return *this;
     }
 
-    basic_object& add_attribute(std::string_view key, basic_object value) {
+    basic_object& add_attribute(string_view_type key, basic_object value) {
         ensure_kind(kind::element);
         attributes_.emplace_back(allocated_string(key, char_allocator(allocator_)), normalize_value(std::move(value)));
         return *this;
     }
 
     template<typename OtherAllocator>
-    basic_object& add_member(std::string_view key, basic_object<OtherAllocator> value) {
+    basic_object& add_member(string_view_type key, basic_object<CharT, OtherAllocator> value) {
         ensure_kind(kind::mapping);
         members_.emplace_back(allocated_string(key, char_allocator(allocator_)), normalize_value(std::move(value)));
         return *this;
     }
 
     template<typename OtherAllocator>
-    basic_object& add_element(basic_object<OtherAllocator> value) {
+    basic_object& add_element(basic_object<CharT, OtherAllocator> value) {
         ensure_kind(kind::sequence);
         elements_.push_back(normalize_value(std::move(value)));
         return *this;
     }
 
     template<typename OtherAllocator>
-    basic_object& add_child(basic_object<OtherAllocator> value) {
+    basic_object& add_child(basic_object<CharT, OtherAllocator> value) {
         ensure_kind(kind::element);
         children_.push_back(normalize_value(std::move(value)));
         return *this;
     }
 
     template<typename OtherAllocator>
-    basic_object& add_attribute(std::string_view key, basic_object<OtherAllocator> value) {
+    basic_object& add_attribute(string_view_type key, basic_object<CharT, OtherAllocator> value) {
         ensure_kind(kind::element);
         attributes_.emplace_back(allocated_string(key, char_allocator(allocator_)), normalize_value(std::move(value)));
         return *this;
@@ -375,12 +376,12 @@ private:
 
     template<typename OtherAllocator>
     [[nodiscard]] static scalar_type clone_scalar(
-        const typename basic_object<OtherAllocator>::scalar_type& scalar,
+        const typename basic_object<CharT, OtherAllocator>::scalar_type& scalar,
         const allocator_type& allocator) {
         return std::visit(
             [&allocator](const auto& value) -> scalar_type {
                 using value_type = std::decay_t<decltype(value)>;
-                using other_string = typename basic_object<OtherAllocator>::allocated_string;
+                using other_string = typename basic_object<CharT, OtherAllocator>::allocated_string;
                 if constexpr (std::is_same_v<value_type, other_string>) {
                     return scalar_type(std::in_place_type<allocated_string>, value.c_str(), char_allocator(allocator));
                 } else {
@@ -392,12 +393,12 @@ private:
 
     template<typename OtherAllocator>
     [[nodiscard]] static scalar_type move_scalar(
-        typename basic_object<OtherAllocator>::scalar_type&& scalar,
+        typename basic_object<CharT, OtherAllocator>::scalar_type&& scalar,
         const allocator_type& allocator) {
         return std::visit(
             [&allocator](auto&& value) -> scalar_type {
                 using value_type = std::decay_t<decltype(value)>;
-                using other_string = typename basic_object<OtherAllocator>::allocated_string;
+                using other_string = typename basic_object<CharT, OtherAllocator>::allocated_string;
                 if constexpr (std::is_same_v<value_type, other_string>) {
                     return scalar_type(
                         std::in_place_type<allocated_string>,
@@ -422,17 +423,17 @@ private:
     }
 
     template<typename OtherAllocator>
-    [[nodiscard]] basic_object normalize_value(const basic_object<OtherAllocator>& value) const {
+    [[nodiscard]] basic_object normalize_value(const basic_object<CharT, OtherAllocator>& value) const {
         return basic_object(std::allocator_arg, allocator_, value);
     }
 
     template<typename OtherAllocator>
-    [[nodiscard]] basic_object normalize_value(basic_object<OtherAllocator>&& value) const {
+    [[nodiscard]] basic_object normalize_value(basic_object<CharT, OtherAllocator>&& value) const {
         return basic_object(std::allocator_arg, allocator_, std::move(value));
     }
 
     template<typename OtherAllocator>
-    void copy_from_other(const basic_object<OtherAllocator>& other) {
+    void copy_from_other(const basic_object<CharT, OtherAllocator>& other) {
         type_ = other.type_;
         name_ = allocated_string(other.name_, char_allocator(allocator_));
         scalar_ = clone_scalar<OtherAllocator>(other.scalar_, allocator_);
@@ -472,7 +473,7 @@ private:
     }
 
     template<typename OtherAllocator>
-    void move_from_other(basic_object<OtherAllocator>&& other) {
+    void move_from_other(basic_object<CharT, OtherAllocator>&& other) {
         if constexpr (std::is_same_v<OtherAllocator, allocator_type>) {
             if (allocators_equal(allocator_, other.allocator_)) {
                 type_ = other.type_;
@@ -551,13 +552,32 @@ private:
     child_container children_;
     attribute_container attributes_;
 
-    template<typename>
+    template<typename, typename>
     friend class basic_object;
 };
 
 using object = basic_object<>;
 
 namespace detail {
+
+template<typename CharT, typename Traits, typename Alloc>
+[[nodiscard]] bool matches_path_name(
+    const std::basic_string<CharT, Traits, Alloc>& value,
+    std::string_view path_name) {
+    if constexpr (std::is_same_v<CharT, char>) {
+        return value == path_name;
+    } else {
+        if (value.size() != path_name.size()) {
+            return false;
+        }
+        for (std::size_t i = 0; i < path_name.size(); ++i) {
+            if (value[i] != static_cast<CharT>(static_cast<unsigned char>(path_name[i]))) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
 
 template<typename Object, typename Pointer>
 using pointer_vector = std::vector<Pointer, typename std::allocator_traits<typename Object::allocator_type>::template rebind_alloc<Pointer>>;
@@ -723,7 +743,7 @@ template<typename Node>
 [[nodiscard]] auto find_named_attribute(Node& current, std::string_view name)
     -> std::conditional_t<std::is_const_v<Node>, const typename std::remove_const_t<Node>::value_type*, typename std::remove_const_t<Node>::value_type*> {
     for (auto& [attribute_name, value] : current.attributes()) {
-        if (attribute_name == name) {
+        if (matches_path_name(attribute_name, name)) {
             return &value;
         }
     }
@@ -734,7 +754,7 @@ template<typename Node, typename Result>
 void append_named_children(Node& current, std::string_view name, std::optional<std::size_t> index, Result& result) {
     std::size_t match_index = 0;
     for (auto& child : current.children()) {
-        if (child.name() != name) {
+        if (!matches_path_name(child.name(), name)) {
             continue;
         }
 
@@ -787,7 +807,7 @@ void append_named_member(Node& current, std::string_view name, std::optional<std
     using object_type = std::remove_const_t<Node>;
 
     for (auto& [member_name, value] : current.members()) {
-        if (member_name != name) {
+        if (!matches_path_name(member_name, name)) {
             continue;
         }
 
@@ -824,7 +844,7 @@ void append_matches_for_segment(Node& current, const path_segment<MaxNameLength>
         return;
     }
 
-    if (!index.has_value() && current.type() == object_type::kind::element && current.name() == name) {
+    if (!index.has_value() && current.type() == object_type::kind::element && matches_path_name(current.name(), name)) {
         result.push_back(&current);
     }
 
@@ -834,9 +854,9 @@ void append_matches_for_segment(Node& current, const path_segment<MaxNameLength>
 
 template<fixed_string Path, std::size_t SegmentIndex>
 struct path_evaluator {
-    template<typename Pointer, typename Allocator>
-    [[nodiscard]] static auto run(const pointer_vector<basic_object<Allocator>, Pointer>& current_nodes, const Allocator& allocator) {
-        using object_type = basic_object<Allocator>;
+    template<typename Pointer, typename CharT, typename Allocator>
+    [[nodiscard]] static auto run(const pointer_vector<basic_object<CharT, Allocator>, Pointer>& current_nodes, const Allocator& allocator) {
+        using object_type = basic_object<CharT, Allocator>;
         using result_type = pointer_vector<object_type, Pointer>;
 
         result_type next_nodes{typename result_type::allocator_type(allocator)};
@@ -848,7 +868,7 @@ struct path_evaluator {
         if constexpr (SegmentIndex + 1U == parsed_path<Path>::segment_count) {
             return next_nodes;
         } else {
-            return path_evaluator<Path, SegmentIndex + 1U>::run(next_nodes, allocator);
+            return path_evaluator<Path, SegmentIndex + 1U>::template run<Pointer, CharT, Allocator>(next_nodes, allocator);
         }
     }
 };
@@ -857,9 +877,9 @@ struct path_evaluator {
 
 template<fixed_string Path>
 struct xpath_query {
-    template<typename Allocator>
-    [[nodiscard]] static auto find_all(basic_object<Allocator>& root) {
-        using object_type = basic_object<Allocator>;
+    template<typename CharT, typename Allocator>
+    [[nodiscard]] static auto find_all(basic_object<CharT, Allocator>& root) {
+        using object_type = basic_object<CharT, Allocator>;
         using result_type = detail::pointer_vector<object_type, object_type*>;
 
         if constexpr (detail::parsed_path<Path>::segment_count == 0) {
@@ -869,13 +889,13 @@ struct xpath_query {
         } else {
             result_type roots(typename result_type::allocator_type(root.get_allocator()));
             roots.push_back(&root);
-            return detail::path_evaluator<Path, 0>::run(roots, root.get_allocator());
+            return detail::path_evaluator<Path, 0>::template run<object_type*, CharT, Allocator>(roots, root.get_allocator());
         }
     }
 
-    template<typename Allocator>
-    [[nodiscard]] static auto find_all(const basic_object<Allocator>& root) {
-        using object_type = basic_object<Allocator>;
+    template<typename CharT, typename Allocator>
+    [[nodiscard]] static auto find_all(const basic_object<CharT, Allocator>& root) {
+        using object_type = basic_object<CharT, Allocator>;
         using result_type = detail::pointer_vector<object_type, const object_type*>;
 
         if constexpr (detail::parsed_path<Path>::segment_count == 0) {
@@ -885,40 +905,40 @@ struct xpath_query {
         } else {
             result_type roots(typename result_type::allocator_type(root.get_allocator()));
             roots.push_back(&root);
-            return detail::path_evaluator<Path, 0>::run(roots, root.get_allocator());
+            return detail::path_evaluator<Path, 0>::template run<const object_type*, CharT, Allocator>(roots, root.get_allocator());
         }
     }
 
-    template<typename Allocator>
-    [[nodiscard]] static basic_object<Allocator>* find_first(basic_object<Allocator>& root) {
+    template<typename CharT, typename Allocator>
+    [[nodiscard]] static basic_object<CharT, Allocator>* find_first(basic_object<CharT, Allocator>& root) {
         auto matches = find_all(root);
         return matches.empty() ? nullptr : matches.front();
     }
 
-    template<typename Allocator>
-    [[nodiscard]] static const basic_object<Allocator>* find_first(const basic_object<Allocator>& root) {
+    template<typename CharT, typename Allocator>
+    [[nodiscard]] static const basic_object<CharT, Allocator>* find_first(const basic_object<CharT, Allocator>& root) {
         auto matches = find_all(root);
         return matches.empty() ? nullptr : matches.front();
     }
 };
 
-template<fixed_string Path, typename Allocator>
-[[nodiscard]] auto find_all(basic_object<Allocator>& root) {
+template<fixed_string Path, typename CharT, typename Allocator>
+[[nodiscard]] auto find_all(basic_object<CharT, Allocator>& root) {
     return xpath_query<Path>::find_all(root);
 }
 
-template<fixed_string Path, typename Allocator>
-[[nodiscard]] auto find_all(const basic_object<Allocator>& root) {
+template<fixed_string Path, typename CharT, typename Allocator>
+[[nodiscard]] auto find_all(const basic_object<CharT, Allocator>& root) {
     return xpath_query<Path>::find_all(root);
 }
 
-template<fixed_string Path, typename Allocator>
-[[nodiscard]] basic_object<Allocator>* find_first(basic_object<Allocator>& root) {
+template<fixed_string Path, typename CharT, typename Allocator>
+[[nodiscard]] basic_object<CharT, Allocator>* find_first(basic_object<CharT, Allocator>& root) {
     return xpath_query<Path>::find_first(root);
 }
 
-template<fixed_string Path, typename Allocator>
-[[nodiscard]] const basic_object<Allocator>* find_first(const basic_object<Allocator>& root) {
+template<fixed_string Path, typename CharT, typename Allocator>
+[[nodiscard]] const basic_object<CharT, Allocator>* find_first(const basic_object<CharT, Allocator>& root) {
     return xpath_query<Path>::find_first(root);
 }
 
