@@ -218,6 +218,7 @@ struct basic_explicit_inner_exception : basic_inner_exception<CharT, Allocator> 
     requires std::is_same_v<std::remove_cvref_t<ForwardedException>, ExceptionType>
     explicit basic_explicit_inner_exception(
         ForwardedException&& exception,
+    const std::source_location& source_location_value,
         const Allocator& allocator = Allocator());
 };
 
@@ -314,12 +315,14 @@ struct basic_invariant_condition_check_exception : basic_condition_check_excepti
 template<typename ExceptionType, typename CharT = char, ndof::allocator_for<CharT> Allocator = std::allocator<CharT>>
 void throw_exception(
     ExceptionType&& exception,
+    std::source_location source_location_value = std::source_location::current(),
     const Allocator& allocator = Allocator()) {
 
     using captured_exception_type = std::remove_cvref_t<ExceptionType>;
     if constexpr (detail::ndof_exception_derived<captured_exception_type>) {
         throw basic_explicit_inner_exception<captured_exception_type, CharT, Allocator>(
-            std::forward<ExceptionType>(exception),
+            std::forward<ExceptionType>(exception), 
+            source_location_value,
             allocator);
     } else if constexpr (detail::inner_exception_derived<captured_exception_type>) {
         throw std::forward<ExceptionType>(exception);
@@ -412,8 +415,10 @@ template<typename ForwardedException>
 requires std::is_same_v<std::remove_cvref_t<ForwardedException>, ExceptionType>
 basic_explicit_inner_exception<ExceptionType, CharT, Allocator>::basic_explicit_inner_exception(
     ForwardedException&& exception,
+    const std::source_location& source_location_value,
     const Allocator& allocator)
     : basic_inner_exception<CharT, Allocator>(std::forward<ForwardedException>(exception), allocator) {
+    (void)source_location_value;
 }
 
 template<typename ExceptionType, typename CharT, ndof::allocator_for<CharT> Allocator>
