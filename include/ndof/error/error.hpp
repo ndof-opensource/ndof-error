@@ -14,9 +14,12 @@
 // Wrapping ndof exceptions as inner exceptions preserves a rethrow chain that can
 // later be rendered as a stack trace.
 
+//TODO: All exceptions should have an inner exception. Remove the link between the conditional exceptions and inherit from std::exception instead.
+//      Change the optional return type of captured_exception() to std::exception_ptr instead of std::optional<std::exception_ptr>.
+//      This will allow for a more consistent exception handling model and make it easier to propagate exceptions through different layers of the application.
+
 namespace ndof {
 using check_mode = build_mode;
-
 
 template<typename Allocator>
 concept allocator_like = requires {
