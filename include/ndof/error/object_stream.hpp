@@ -22,6 +22,14 @@ namespace ndof {
               object_(object) {
         }
 
+        allocator_type get_allocator() const noexcept {
+            return allocator_;
+        }
+        
+        const object_type& get_object() const noexcept {
+            return object_;
+        }
+
     private:
         allocator_type allocator_;
         object_type object_;
