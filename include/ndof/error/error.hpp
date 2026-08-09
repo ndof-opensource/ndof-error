@@ -11,6 +11,13 @@
 #include <type_traits>
 #include <utility>
 
+
+// Note: GitHub Copilot Pro is designed for individuals who want more flexibility. 
+//       This paid plan includes unlimited completions, access to a selection of models, Copilot cloud agent, 
+//       and a monthly allowance of AI credits. 
+//       Verified teachers, and maintainers of popular open source projects may be eligible for free access.
+//                ^^^^^^^^      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 // Wrapping ndof exceptions as inner exceptions preserves a rethrow chain that can
 // later be rendered as a stack trace.
 
@@ -119,10 +126,9 @@ requires allocator_for<SourceAllocator, CharT> && allocator_for<DestinationAlloc
 [[nodiscard]] std::basic_string<CharT, Traits, DestinationAllocator> move_considering_allocators(
     std::basic_string<CharT, Traits, SourceAllocator>&& value,
     const DestinationAllocator& allocator) {
-    if constexpr (std::is_same_v<SourceAllocator, DestinationAllocator>) {
-        if (value.get_allocator() == allocator) {
-            return std::basic_string<CharT, Traits, DestinationAllocator>(std::move(value));
-        }
+    if constexpr ((std::is_same_v<SourceAllocator, DestinationAllocator>) 
+    && (value.get_allocator() == allocator)) {
+        return std::basic_string<CharT, Traits, DestinationAllocator>(std::move(value));
     }
     return std::basic_string<CharT, Traits, DestinationAllocator>(value.data(), value.size(), allocator);
 }
@@ -192,7 +198,7 @@ template<typename CharT = char, ndof::allocator_for<CharT> Allocator = std::allo
 struct basic_inner_exception : basic_exception<CharT, Allocator>, inner_exception_tag {
     using allocated_string = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
 
-    explicit basic_inner_exception(const Allocator& allocator = Allocator());
+    // explicit basic_inner_exception(const Allocator& allocator = Allocator());
 
     template<typename CapturedException>
     requires (!std::is_same_v<std::remove_cvref_t<CapturedException>, basic_inner_exception<CharT, Allocator>>)
