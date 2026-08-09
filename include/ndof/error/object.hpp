@@ -87,7 +87,7 @@ public:
     }
 
     basic_object(const basic_object& other)
-        : basic_object(std::allocator_arg, other.get_allocator(), other) {
+        : basic_object(std::allocator_arg, other.allocator(), other) {
     }
 
     template<typename OtherAllocator>
@@ -119,7 +119,7 @@ public:
     }
 
     basic_object(basic_object&& other) noexcept
-        : basic_object(std::allocator_arg, other.get_allocator(), std::move(other)) {
+        : basic_object(std::allocator_arg, other.allocator(), std::move(other)) {
     }
 
     template<typename OtherAllocator>
@@ -230,7 +230,7 @@ public:
         return result;
     }
 
-    [[nodiscard]] allocator_type get_allocator() const noexcept {
+    [[nodiscard]] allocator_type allocator() const noexcept {
         return allocator_;
     }
 
@@ -414,7 +414,7 @@ private:
     // Rebinds an incoming node to this object's allocator so child/member storage
     // stays allocator-consistent even when values are created with a different allocator.
     [[nodiscard]] basic_object normalize_value(basic_object&& value) const {
-        if (allocators_equal(allocator_, value.get_allocator())) {
+        if (allocators_equal(allocator_, value.allocator())) {
             return std::move(value);
         }
         // TODO: Check this. If the allocators are not equal, we need to rebind the value to this object's allocator.
@@ -883,13 +883,13 @@ struct xpath_query {
         using result_type = detail::pointer_vector<object_type, object_type*>;
 
         if constexpr (detail::parsed_path<Path>::segment_count == 0) {
-            result_type matches(typename result_type::allocator_type(root.get_allocator()));
+            result_type matches(typename result_type::allocator_type(root.allocator()));
             matches.push_back(&root);
             return matches;
         } else {
-            result_type roots(typename result_type::allocator_type(root.get_allocator()));
+            result_type roots(typename result_type::allocator_type(root.allocator()));
             roots.push_back(&root);
-            return detail::path_evaluator<Path, 0>::template run<object_type*, CharT, Allocator>(roots, root.get_allocator());
+            return detail::path_evaluator<Path, 0>::template run<object_type*, CharT, Allocator>(roots, root.allocator());
         }
     }
 
@@ -899,13 +899,13 @@ struct xpath_query {
         using result_type = detail::pointer_vector<object_type, const object_type*>;
 
         if constexpr (detail::parsed_path<Path>::segment_count == 0) {
-            result_type matches(typename result_type::allocator_type(root.get_allocator()));
+            result_type matches(typename result_type::allocator_type(root.allocator()));
             matches.push_back(&root);
             return matches;
         } else {
-            result_type roots(typename result_type::allocator_type(root.get_allocator()));
+            result_type roots(typename result_type::allocator_type(root.allocator()));
             roots.push_back(&root);
-            return detail::path_evaluator<Path, 0>::template run<const object_type*, CharT, Allocator>(roots, root.get_allocator());
+            return detail::path_evaluator<Path, 0>::template run<const object_type*, CharT, Allocator>(roots, root.allocator());
         }
     }
 

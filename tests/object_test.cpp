@@ -10,7 +10,7 @@
 
 namespace {
 
-using TitlePath = ndof::xpath_query<"/catalog/book[2]/title">;
+using title_path = ndof::xpath_query<"/catalog/book[2]/title">;
 
 static_assert(ndof::detail::parsed_path<"/catalog/book[2]/title">::segment_count == 3);
 
@@ -75,7 +75,7 @@ Object build_commented_mapping_document(const typename Object::allocator_type& a
 
 template<typename Object>
 void expect_tree_allocator(const Object& node, const typename Object::allocator_type& expected_allocator) {
-    EXPECT_EQ(node.get_allocator(), expected_allocator);
+    EXPECT_EQ(node.allocator(), expected_allocator);
 
     for (const auto& [_, value] : node.members()) {
         expect_tree_allocator(value, expected_allocator);
@@ -97,7 +97,7 @@ void expect_tree_allocator(const Object& node, const typename Object::allocator_
 TEST(ObjectQuery, ResolvesRepeatedXmlChildrenByCompileTimePath) {
     const ndof::object document = build_xml_like_document<ndof::object>();
 
-    const ndof::object* title = TitlePath::find_first(document);
+    const ndof::object* title = title_path::find_first(document);
     ASSERT_NE(title, nullptr);
     ASSERT_EQ(title->children().size(), 1U);
 
@@ -153,7 +153,7 @@ TEST(ObjectQuery, ResolvesPathsForPmrAllocatorBackedObjects) {
 
     const object_type* name = ndof::find_first<"/users[2]/name">(document);
     ASSERT_NE(name, nullptr);
-    ASSERT_EQ(document.get_allocator().resource(), &resource);
+    ASSERT_EQ(document.allocator().resource(), &resource);
 
     const auto* value = name->as_string();
     ASSERT_NE(value, nullptr);
@@ -194,7 +194,7 @@ TEST(ObjectAllocator, MoveAcrossDifferentPmrResourcesRebindsWholeTree) {
 
     const object_type moved(std::allocator_arg, destination_allocator, std::move(source));
 
-    EXPECT_EQ(moved.get_allocator(), destination_allocator);
+    EXPECT_EQ(moved.allocator(), destination_allocator);
     expect_tree_allocator(moved, destination_allocator);
 
     const object_type* title = ndof::find_first<"/catalog/book[2]/title">(moved);

@@ -29,7 +29,7 @@ struct ndof_type_index {
     }
 
     template<typename T>
-    [[nodiscard]] static ndof_type_index of() noexcept {
+    [[nodiscard]] static ndof_type_index for_type() noexcept {
         using normalized_type = std::remove_cvref_t<T>;
         return ndof_type_index(static_cast<value_type>(&detail::ndof_type_tag<normalized_type>::value));
     }

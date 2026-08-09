@@ -7,19 +7,19 @@
 namespace ndof { 
 
     template<typename CharT = char, typename Allocator = std::allocator<CharT>>
-    struct ObjectStream :
+    struct basic_object_ostream :
         public std::basic_ostream<CharT, std::char_traits<CharT>> {
     public:
         using allocator_type = Allocator;
-        using allocated_string = std::basic_string<char, std::char_traits<char>, allocator_type>;
+        using allocated_string = std::basic_string<CharT, std::char_traits<CharT>, allocator_type>;
 
-        ObjectStream(const basic_object<allocator_type>& obj, const allocator_type& allocator = allocator_type())
-            : obj_(obj), allocator_(allocator) {
+        basic_object_ostream(const basic_object<CharT, allocator_type>& object, const allocator_type& allocator = allocator_type())
+            : allocator_(allocator), object_(object) {
         }
 
     private:
         allocator_type allocator_;
-        basic_object<allocator_type> obj_;
+        basic_object<CharT, allocator_type> object_;
     };
     
 

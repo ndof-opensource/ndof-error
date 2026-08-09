@@ -23,43 +23,43 @@ constexpr bool kRttiEnabled = false;
 
 } // namespace
 
-ndof::BuildMode getBuildMode() noexcept {
+ndof::build_mode build_mode() noexcept {
     if (kBuildModeValue == "debug") {
-        return ndof::BuildMode::debug;
+        return ndof::build_mode::debug;
     }
     if (kBuildModeValue == "release") {
-        return ndof::BuildMode::release;
+        return ndof::build_mode::release;
     }
-    return ndof::BuildMode::undefined;
+    return ndof::build_mode::undefined;
 }
 
-std::string_view getBuildModeName() noexcept {
-    switch (getBuildMode()) {
-    case ndof::BuildMode::debug:
+std::string_view build_mode_name() noexcept {
+    switch (build_mode()) {
+    case ndof::build_mode::debug:
         return "debug";
-    case ndof::BuildMode::release:
+    case ndof::build_mode::release:
         return "release";
     default:
         return "undefined";
     }
 }
 
-bool isRttiEnabled() noexcept {
+bool rtti_enabled() noexcept {
     return kRttiEnabled;
 }
 
-ndof::TypeIndexMode getTypeIndexMode() noexcept {
+ndof::type_index_mode type_index_mode() noexcept {
     if (kRttiEnabled) {
-        return ndof::TypeIndexMode::rtti_type_index;
+        return ndof::type_index_mode::rtti_type_index;
     }
-    return ndof::TypeIndexMode::ndof_type_index;
+    return ndof::type_index_mode::ndof_type_index;
 }
 
-std::string_view getTypeIndexModeName() noexcept {
-    switch (getTypeIndexMode()) {
-    case ndof::TypeIndexMode::rtti_type_index:
+std::string_view type_index_mode_name() noexcept {
+    switch (type_index_mode()) {
+    case ndof::type_index_mode::rtti_type_index:
         return "std::type_index";
-    case ndof::TypeIndexMode::ndof_type_index:
+    case ndof::type_index_mode::ndof_type_index:
         return "ndof_type_index";
     default:
         return "unknown";
