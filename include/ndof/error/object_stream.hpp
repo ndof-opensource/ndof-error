@@ -7,6 +7,9 @@
 
 namespace ndof { 
 
+
+    // TODO: Figure out how to covert to xml, yaml or json.  Maybe add a formatter for each format and then use the formatter to write to the stream.
+
     template<typename CharT = char, typename Allocator = std::allocator<std::byte>>
     struct basic_object_iostream :
         public std::basic_iostream<CharT, std::char_traits<CharT>> {
@@ -25,7 +28,7 @@ namespace ndof {
         allocator_type get_allocator() const noexcept {
             return allocator_;
         }
-        
+
         const object_type& get_object() const noexcept {
             return object_;
         }
