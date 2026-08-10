@@ -5,7 +5,6 @@
 #include <memory>
 #include <optional>
 #include <source_location>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -21,27 +20,59 @@
 // Wrapping ndof exceptions as inner exceptions preserves a rethrow chain that can
 // later be rendered as a stack trace.
 
-//TODO: All exceptions should have an inner exception. Remove the link between the conditional exceptions and inherit from std::exception instead.
+// TODO: All exceptions should have an inner exception. Remove the link between the conditional exceptions and inherit from std::exception instead.
 //      Change the optional return type of captured_exception() to std::exception_ptr instead of std::optional<std::exception_ptr>.
 //      This will allow for a more consistent exception handling model and make it easier to propagate exceptions through different layers of the application.
 
+// TODO: Does exception need to be allocator aware? If not, remove the allocator stuff from the base classes as necessary.
+
+
 namespace ndof {
+// TODO: move this to the core library.
 using check_mode = build_mode;
 
 template<typename Allocator>
-concept allocator_like = requires {
+concept has_allocator_definitions = requires {
     typename std::allocator_traits<Allocator>::value_type;
+    typename std::allocator_traits<Allocator>::pointer;
+    typename std::allocator_traits<Allocator>::const_pointer;
+    typename std::allocator_traits<Allocator>::void_pointer;
+    typename std::allocator_traits<Allocator>::const_void_pointer;
 };
+
+
+template<typename T>
+concept allocator_value_gettable =
+    requires(const T& value) {
+        typename T::allocator_type;
+        { value.get_value() } -> std::same_as<typename T::allocator_type>;
+};
+
+template<typename T>
+concept allocator_like =
+    requires(const T& value) {
+        typename T::value_type;
+        typename T::pointer;
+        typename T::const_pointer;
+        typename T::void_pointer;
+        typename T::const_void_pointer;
+    } 
+    && std::is_default_constructible_v<T> 
+    && std::is_copy_constructible_v<T> 
+    && std::is_copy_assignable_v<T> 
+    && std::is_destructible_v<T>;
+
+// TODO: add has a get_value check here somehow.
 
 template<typename Allocator, typename ValueType>
 concept allocator_for =
-    allocator_like<Allocator> &&
+    ndof::allocator_like<Allocator> &&
     std::same_as<typename std::allocator_traits<Allocator>::value_type, ValueType>;
 
 template<typename Allocator, typename ExpectedAllocator>
 concept allocator_compatible_with =
-    allocator_like<Allocator> &&
-    allocator_like<ExpectedAllocator> &&
+    ndof::allocator_like<Allocator> &&
+    ndof::allocator_like<ExpectedAllocator> &&
     std::same_as<
         typename std::allocator_traits<Allocator>::value_type,
         typename std::allocator_traits<ExpectedAllocator>::value_type> &&
@@ -60,16 +91,15 @@ concept allocator_aware_move_propagating =
         typename T::allocator_type;
         typename std::allocator_traits<typename T::allocator_type>::propagate_on_container_move_assignment;
     } && std::allocator_traits<typename T::allocator_type>::propagate_on_container_move_assignment::value;
-
-}
+ 
+} // namespace ndof
 
 namespace ndof::error {
 
 struct exception_tag {
 };
 
-struct inner_exception_tag : exception_tag {
-};
+
 
 namespace detail {
 
@@ -145,21 +175,18 @@ make_string_from_narrow(const char* text, const Allocator& allocator) {
 }
 
 template<typename T>
-concept inner_exception_derived =
-    requires { requires std::derived_from<std::remove_cvref_t<T>, inner_exception_tag>; };
-
-template<typename T>
 concept ndof_exception_derived =
     requires { requires std::derived_from<std::remove_cvref_t<T>, exception_tag>; };
 
 } // namespace detail
 
-// Note: should define stream to object operators.
-//       In that case, to_string() can be removed and replaced with stream operator.
+// TODO: should define stream to object operators.
+ 
 
 template<typename CharT = char, ndof::allocator_for<CharT> Allocator = std::allocator<CharT>>
 struct basic_exception : std::exception, exception_tag {
 public:
+    using allocator_type = Allocator;
     using allocated_string = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
 
     basic_exception() = delete;
@@ -180,6 +207,7 @@ public:
     [[nodiscard]] const char* function_name() const noexcept;
     [[nodiscard]] std::uint_least32_t line() const noexcept;
     [[nodiscard]] ndof::build_mode build_mode() const noexcept;
+    [[nodiscard]] const allocator_type& get_allocator() const noexcept;
     [[nodiscard]] const allocated_string& message() const noexcept;
 
 protected:
@@ -187,45 +215,21 @@ protected:
 
 private:
     std::source_location location_;
+    allocator_type allocator_;
     allocated_string file_name_;
     allocated_string message_;
     std::optional<std::exception_ptr> captured_exception_;
 };
 
-template<typename CharT = char, ndof::allocator_for<CharT> Allocator = std::allocator<CharT>>
-struct basic_inner_exception : basic_exception<CharT, Allocator>, inner_exception_tag {
-    using allocated_string = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
-
-    // explicit basic_inner_exception(const Allocator& allocator = Allocator());
-
-    template<typename CapturedException>
-    requires (!std::is_same_v<std::remove_cvref_t<CapturedException>, basic_inner_exception<CharT, Allocator>>)
-    explicit basic_inner_exception(CapturedException&& exception, const Allocator& allocator = Allocator());
-
-    basic_inner_exception(const basic_inner_exception&) = default;
-    basic_inner_exception(basic_inner_exception&&) = default;
-    basic_inner_exception& operator=(const basic_inner_exception&) = default;
-    basic_inner_exception& operator=(basic_inner_exception&&) = default;
-    ~basic_inner_exception() = default;
-
-    [[nodiscard]] const char* what() const noexcept override;
-
-protected:
-    [[nodiscard]] const std::exception_ptr& inner_captured_exception() const noexcept;
-
-private:
-    std::exception_ptr inner_captured_exception_;
-};
-
 template<typename ExceptionType, typename CharT = char, ndof::allocator_for<CharT> Allocator = std::allocator<CharT>>
-struct basic_explicit_inner_exception : basic_inner_exception<CharT, Allocator> {
+struct basic_explicit_inner_exception : basic_exception<CharT, Allocator> {
     explicit basic_explicit_inner_exception(const Allocator& allocator = Allocator());
 
     template<typename ForwardedException>
     requires std::is_same_v<std::remove_cvref_t<ForwardedException>, ExceptionType>
     explicit basic_explicit_inner_exception(
         ForwardedException&& exception,
-    const std::source_location& source_location_value,
+        const std::source_location& source_location_value,
         const Allocator& allocator = Allocator());
 };
 
@@ -331,8 +335,6 @@ void throw_exception(
             std::forward<ExceptionType>(exception), 
             source_location_value,
             allocator);
-    } else if constexpr (detail::inner_exception_derived<captured_exception_type>) {
-        throw std::forward<ExceptionType>(exception);
     } else {
         throw basic_explicit_inner_exception<captured_exception_type, CharT, Allocator>(
             std::forward<ExceptionType>(exception),
@@ -345,6 +347,7 @@ basic_exception<CharT, Allocator>::basic_exception(
     const std::source_location& source_location_value,
     const Allocator& allocator)
     : location_(source_location_value),
+      allocator_(allocator),
       file_name_(detail::make_string_from_narrow<CharT, Allocator>(source_location_value.file_name(), allocator)),
       message_(detail::make_string_from_narrow<CharT, Allocator>("implement me", allocator)),
       captured_exception_(std::nullopt) {
@@ -372,6 +375,12 @@ ndof::build_mode basic_exception<CharT, Allocator>::build_mode() const noexcept 
 }
 
 template<typename CharT, ndof::allocator_for<CharT> Allocator>
+const typename basic_exception<CharT, Allocator>::allocator_type&
+basic_exception<CharT, Allocator>::get_allocator() const noexcept {
+    return allocator_;
+}
+
+template<typename CharT, ndof::allocator_for<CharT> Allocator>
 const typename basic_exception<CharT, Allocator>::allocated_string&
 basic_exception<CharT, Allocator>::message() const noexcept {
     return message_;
@@ -388,44 +397,16 @@ const char* basic_exception<CharT, Allocator>::what() const noexcept {
     return "ndof::error::Exception";
 }
 
-template<typename CharT, ndof::allocator_for<CharT> Allocator>
-basic_inner_exception<CharT, Allocator>::basic_inner_exception(const Allocator& allocator)
-    : basic_exception<CharT, Allocator>(std::source_location::current(), allocator),
-      inner_captured_exception_(std::make_exception_ptr(std::runtime_error("no captured exception"))) {
-}
-
-template<typename CharT, ndof::allocator_for<CharT> Allocator>
-template<typename CapturedException>
-requires (!std::is_same_v<std::remove_cvref_t<CapturedException>, basic_inner_exception<CharT, Allocator>>)
-basic_inner_exception<CharT, Allocator>::basic_inner_exception(CapturedException&& exception, const Allocator& allocator)
-    : basic_exception<CharT, Allocator>(std::source_location::current(), allocator),
-      inner_captured_exception_(std::make_exception_ptr(std::forward<CapturedException>(exception))) {
-}
-
-template<typename CharT, ndof::allocator_for<CharT> Allocator>
-const std::exception_ptr& basic_inner_exception<CharT, Allocator>::inner_captured_exception() const noexcept {
-    return inner_captured_exception_;
-}
-
-template<typename CharT, ndof::allocator_for<CharT> Allocator>
-const char* basic_inner_exception<CharT, Allocator>::what() const noexcept {
-    return basic_exception<CharT, Allocator>::what();
-}
-
-template<typename ExceptionType, typename CharT, ndof::allocator_for<CharT> Allocator>
-basic_explicit_inner_exception<ExceptionType, CharT, Allocator>::basic_explicit_inner_exception(const Allocator& allocator)
-    : basic_inner_exception<CharT, Allocator>(allocator) {
-}
-
 template<typename ExceptionType, typename CharT, ndof::allocator_for<CharT> Allocator>
 template<typename ForwardedException>
 requires std::is_same_v<std::remove_cvref_t<ForwardedException>, ExceptionType>
 basic_explicit_inner_exception<ExceptionType, CharT, Allocator>::basic_explicit_inner_exception(
     ForwardedException&& exception,
-    const std::source_location& source_location_value,
+    [[maybe_unused]] const std::source_location& source_location_value,
     const Allocator& allocator)
-    : basic_inner_exception<CharT, Allocator>(std::forward<ForwardedException>(exception), allocator) {
-    (void)source_location_value;
+    : basic_exception<CharT, Allocator>(std::forward<ForwardedException>(exception), allocator) {
+        // TODO: Fix the initialization of the base class, vis-a-vis the source_location_value. The base class constructor does not currently accept a source location parameter, which is needed to properly initialize the exception with the correct context.
+     
 }
 
 template<typename ExceptionType, typename CharT, ndof::allocator_for<CharT> Allocator>
@@ -447,6 +428,8 @@ ndof::check_mode basic_condition_check_exception<ExceptionType, CharT, Allocator
 
 template<typename ExceptionType, typename CharT, ndof::allocator_for<CharT> Allocator>
 const char* basic_condition_check_exception<ExceptionType, CharT, Allocator>::what() const noexcept {
+    // TODO: Implement this properly.
+    //       The current implementation simply returns the base class's what() message, which is not informative enough for condition check exceptions. A more detailed message should be constructed that includes the expression, message, and check mode information.
     return basic_exception<CharT, Allocator>::what();
 }
 
@@ -454,6 +437,7 @@ template<typename ExceptionType, typename CharT, ndof::allocator_for<CharT> Allo
 template<ndof::allocator_for<CharT> OtherAllocator>
 basic_condition_check_exception<ExceptionType, CharT, Allocator>::basic_condition_check_exception(
     const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& expression_value,
+    // TODO: Fix this.
     [[maybe_unused]] const std::source_location& location_value,
     const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& message_value,
     ndof::check_mode check_mode_value,
@@ -513,4 +497,5 @@ basic_invariant_condition_check_exception<ExceptionType, CharT, Allocator>::basi
 }
  
 
-} // namespace ndof::error
+ 
+}
