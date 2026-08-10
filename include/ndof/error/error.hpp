@@ -210,8 +210,8 @@ public:
     [[nodiscard]] const allocator_type& get_allocator() const noexcept;
     [[nodiscard]] const allocated_string& message() const noexcept;
 
-protected:
-    [[nodiscard]] const std::optional<std::exception_ptr>& captured_exception() const noexcept;
+// protected:
+//     [[nodiscard]] const std::optional<std::exception_ptr>& captured_exception() const noexcept;
 
 private:
     std::source_location location_;
