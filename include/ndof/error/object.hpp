@@ -5,6 +5,8 @@
 #include "ndof/error/allocator_support.hpp"
 #include "fixed_string.hpp"
  
+// TODO: Move this to the core library.
+// TODO: Make sure the method classifier stuff specializes on noexcept.
 
 #include <algorithm>
 #include <array>
