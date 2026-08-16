@@ -1,7 +1,10 @@
 // Copyright 2026 The ndof Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#pragma once
+// #include "ndof/error/fixed_string.hpp"
+#include "ndof/error/allocator_support.hpp"
+#include "fixed_string.hpp"
+ 
 
 #include <algorithm>
 #include <array>
@@ -21,543 +24,481 @@
 
 namespace ndof {
 
-template<std::size_t N>
-struct fixed_string {
-    char value[N]{};
+// Forward declarations
+template<typename CharT, typename Allocator>
+class basic_object;
 
-    constexpr fixed_string(const char (&input)[N]) {
-        std::copy_n(input, N, value);
-    }
-
-    [[nodiscard]] constexpr std::string_view view() const noexcept {
-        return std::string_view(value, N - 1);
-    }
+// Node type enumeration
+enum class node_kind {
+    null,
+    element,
+    attribute,
+    text,
+    sequence,
+    mapping,
+    comment
 };
 
-template<std::size_t N>
-fixed_string(const char (&)[N]) -> fixed_string<N>;
-
-template<typename CharT = char, typename Allocator = std::allocator<std::byte>>
-class basic_object {
-public:
+// Node type traits
+template<typename CharT, allocator_for<CharT> Allocator>
+struct node_type_traits {
+    using char_type = CharT;
     using allocator_type = Allocator;
-    using allocator_traits = std::allocator_traits<allocator_type>;
-    using char_allocator = typename allocator_traits::template rebind_alloc<CharT>;
-    using allocated_string = std::basic_string<CharT, std::char_traits<CharT>, char_allocator>;
-    using string_view_type = std::basic_string_view<CharT>;
+    using string_type = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
+    using object_type = basic_object<CharT, Allocator>;
+};
 
-    enum class kind : std::uint8_t {
-        null_value,
-        string,
-        comment,
-        integer,
-        floating_point,
-        boolean,
-        mapping,
-        sequence,
-        element
-    };
+// Text node - represents scalar values (JSON string, number, boolean, null)
+template<typename CharT, allocator_for<CharT> Allocator>
+class text_node {
+public:
+    using char_type = CharT;
+    using allocator_type = Allocator;
+    using string_type = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
 
-    using value_type = basic_object;
-    using member_type = std::pair<allocated_string, value_type>;
-    using attribute_type = std::pair<allocated_string, value_type>;
-    using member_allocator = typename allocator_traits::template rebind_alloc<member_type>;
-    using child_allocator = typename allocator_traits::template rebind_alloc<value_type>;
-    using attribute_allocator = typename allocator_traits::template rebind_alloc<attribute_type>;
-    using scalar_type = std::variant<std::monostate, allocated_string, std::int64_t, double, bool>;
-    using member_container = std::vector<member_type, member_allocator>;
-    using child_container = std::vector<value_type, child_allocator>;
-    using attribute_container = std::vector<attribute_type, attribute_allocator>;
+    text_node(const allocator_type& alloc = allocator_type())
+        : value_(alloc) {}
+    
+    text_node(const string_type& val, const allocator_type& alloc = allocator_type())
+        : value_(val, alloc) {}
+    
+    text_node(string_type&& val, const allocator_type& alloc = allocator_type())
+        : value_(std::move(val), alloc) {}
 
-    basic_object()
-        : basic_object(allocator_type()) {
+    [[nodiscard]] node_kind kind() const noexcept {
+        return node_kind::text;
     }
 
-    explicit basic_object(const allocator_type& allocator)
-        : allocator_(allocator),
-          name_(char_allocator(allocator)),
-          members_(member_allocator(allocator)),
-          elements_(child_allocator(allocator)),
-          children_(child_allocator(allocator)),
-          attributes_(attribute_allocator(allocator)) {
+    [[nodiscard]] const string_type& value() const noexcept {
+        return value_;
     }
 
-    basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator)
-        : basic_object(allocator) {
+    void set_value(const string_type& val) {
+        value_ = val;
     }
 
-    basic_object(const basic_object& other)
-        : basic_object(std::allocator_arg, other.allocator(), other) {
+    void set_value(string_type&& val) {
+        value_ = std::move(val);
     }
 
-    template<typename OtherAllocator>
-    requires (!std::is_same_v<OtherAllocator, allocator_type>)
-    basic_object(const basic_object<CharT, OtherAllocator>& other)
-        : basic_object(std::allocator_arg, allocator_type(), other) {
-    }
-
-        basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator, const basic_object& other)
-        : allocator_(allocator),
-          name_(char_allocator(allocator)),
-          members_(member_allocator(allocator)),
-          elements_(child_allocator(allocator)),
-          children_(child_allocator(allocator)),
-          attributes_(attribute_allocator(allocator)) {
-        copy_from_other(other);
-    }
-
-    template<typename OtherAllocator>
-    requires (!std::is_same_v<OtherAllocator, allocator_type>)
-        basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator, const basic_object<CharT, OtherAllocator>& other)
-        : allocator_(allocator),
-          name_(char_allocator(allocator)),
-          members_(member_allocator(allocator)),
-          elements_(child_allocator(allocator)),
-          children_(child_allocator(allocator)),
-          attributes_(attribute_allocator(allocator)) {
-        copy_from_other(other);
-    }
-
-    basic_object(basic_object&& other) noexcept
-        : basic_object(std::allocator_arg, other.allocator(), std::move(other)) {
-    }
-
-    template<typename OtherAllocator>
-    requires (!std::is_same_v<OtherAllocator, allocator_type>)
-    basic_object(basic_object<CharT, OtherAllocator>&& other)
-        : basic_object(std::allocator_arg, allocator_type(), std::move(other)) {
-    }
-
-        basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator, basic_object&& other)
-        : allocator_(allocator),
-          name_(char_allocator(allocator)),
-          members_(member_allocator(allocator)),
-          elements_(child_allocator(allocator)),
-          children_(child_allocator(allocator)),
-          attributes_(attribute_allocator(allocator)) {
-        move_from_other(std::move(other));
-    }
-
-    template<typename OtherAllocator>
-    requires (!std::is_same_v<OtherAllocator, allocator_type>)
-        basic_object([[maybe_unused]] std::allocator_arg_t allocator_tag, const allocator_type& allocator, basic_object<CharT, OtherAllocator>&& other)
-        : allocator_(allocator),
-          name_(char_allocator(allocator)),
-          members_(member_allocator(allocator)),
-          elements_(child_allocator(allocator)),
-          children_(child_allocator(allocator)),
-          attributes_(attribute_allocator(allocator)) {
-        move_from_other(std::move(other));
-    }
-
-    basic_object& operator=(const basic_object& other) {
-        if (this == &other) {
-            return *this;
-        }
-
-        copy_from_other(other);
-        return *this;
-    }
-
-    template<typename OtherAllocator>
-    requires (!std::is_same_v<OtherAllocator, allocator_type>)
-    basic_object& operator=(const basic_object<CharT, OtherAllocator>& other) {
-        copy_from_other(other);
-        return *this;
-    }
-
-    basic_object& operator=(basic_object&& other) {
-        if (this == &other) {
-            return *this;
-        }
-
-        move_from_other(std::move(other));
-        return *this;
-    }
-
-    template<typename OtherAllocator>
-    requires (!std::is_same_v<OtherAllocator, allocator_type>)
-    basic_object& operator=(basic_object<CharT, OtherAllocator>&& other) {
-        move_from_other(std::move(other));
-        return *this;
-    }
-
-    [[nodiscard]] static basic_object null_value(const allocator_type& allocator = allocator_type()) {
-        return basic_object(kind::null_value, allocator);
-    }
-
-    [[nodiscard]] static basic_object string(string_view_type value, const allocator_type& allocator = allocator_type()) {
-        basic_object result(kind::string, allocator);
-        result.scalar_ = allocated_string(value, char_allocator(allocator));
-        return result;
-    }
-
-    [[nodiscard]] static basic_object comment(string_view_type value, const allocator_type& allocator = allocator_type()) {
-        basic_object result(kind::comment, allocator);
-        result.scalar_ = allocated_string(value, char_allocator(allocator));
-        return result;
-    }
-
-    [[nodiscard]] static basic_object integer(std::int64_t value, const allocator_type& allocator = allocator_type()) {
-        basic_object result(kind::integer, allocator);
-        result.scalar_ = value;
-        return result;
-    }
-
-    [[nodiscard]] static basic_object floating_point(double value, const allocator_type& allocator = allocator_type()) {
-        basic_object result(kind::floating_point, allocator);
-        result.scalar_ = value;
-        return result;
-    }
-
-    [[nodiscard]] static basic_object boolean(bool value, const allocator_type& allocator = allocator_type()) {
-        basic_object result(kind::boolean, allocator);
-        result.scalar_ = value;
-        return result;
-    }
-
-    [[nodiscard]] static basic_object mapping(const allocator_type& allocator = allocator_type()) {
-        return basic_object(kind::mapping, allocator);
-    }
-
-    [[nodiscard]] static basic_object sequence(const allocator_type& allocator = allocator_type()) {
-        return basic_object(kind::sequence, allocator);
-    }
-
-    [[nodiscard]] static basic_object element(string_view_type name, const allocator_type& allocator = allocator_type()) {
-        basic_object result(kind::element, allocator);
-        result.name_ = allocated_string(name, char_allocator(allocator));
-        return result;
-    }
-
-    [[nodiscard]] allocator_type allocator() const noexcept {
-        return allocator_;
-    }
-
-    [[nodiscard]] kind type() const noexcept {
-        return type_;
-    }
-
-    [[nodiscard]] const allocated_string& name() const noexcept {
-        return name_;
-    }
-
-    [[nodiscard]] const scalar_type& scalar() const noexcept {
-        return scalar_;
-    }
-
-    [[nodiscard]] const member_container& members() const noexcept {
-        return members_;
-    }
-
-    [[nodiscard]] const child_container& elements() const noexcept {
-        return elements_;
-    }
-
-    [[nodiscard]] const child_container& children() const noexcept {
-        return children_;
-    }
-
-    [[nodiscard]] const attribute_container& attributes() const noexcept {
-        return attributes_;
-    }
-
-    [[nodiscard]] const allocated_string* as_string() const noexcept {
-        return std::get_if<allocated_string>(&scalar_);
-    }
-
-    [[nodiscard]] const allocated_string* as_comment() const noexcept {
-        if (type_ != kind::comment) {
-            return nullptr;
-        }
-        return std::get_if<allocated_string>(&scalar_);
-    }
-
-    [[nodiscard]] const std::int64_t* as_integer() const noexcept {
-        return std::get_if<std::int64_t>(&scalar_);
-    }
-
-    [[nodiscard]] const double* as_floating_point() const noexcept {
-        return std::get_if<double>(&scalar_);
-    }
-
-    [[nodiscard]] const bool* as_boolean() const noexcept {
-        return std::get_if<bool>(&scalar_);
-    }
-
-    basic_object& add_member(string_view_type key, basic_object value) {
-        ensure_kind(kind::mapping);
-        members_.emplace_back(allocated_string(key, char_allocator(allocator_)), normalize_value(std::move(value)));
-        return *this;
-    }
-
-    basic_object& add_element(basic_object value) {
-        ensure_kind(kind::sequence);
-        elements_.push_back(normalize_value(std::move(value)));
-        return *this;
-    }
-
-    basic_object& add_child(basic_object value) {
-        ensure_kind(kind::element);
-        children_.push_back(normalize_value(std::move(value)));
-        return *this;
-    }
-
-    basic_object& add_attribute(string_view_type key, basic_object value) {
-        ensure_kind(kind::element);
-        attributes_.emplace_back(allocated_string(key, char_allocator(allocator_)), normalize_value(std::move(value)));
-        return *this;
-    }
-
-    template<typename OtherAllocator>
-    basic_object& add_member(string_view_type key, basic_object<CharT, OtherAllocator> value) {
-        ensure_kind(kind::mapping);
-        members_.emplace_back(allocated_string(key, char_allocator(allocator_)), normalize_value(std::move(value)));
-        return *this;
-    }
-
-    template<typename OtherAllocator>
-    basic_object& add_element(basic_object<CharT, OtherAllocator> value) {
-        ensure_kind(kind::sequence);
-        elements_.push_back(normalize_value(std::move(value)));
-        return *this;
-    }
-
-    template<typename OtherAllocator>
-    basic_object& add_child(basic_object<CharT, OtherAllocator> value) {
-        ensure_kind(kind::element);
-        children_.push_back(normalize_value(std::move(value)));
-        return *this;
-    }
-
-    template<typename OtherAllocator>
-    basic_object& add_attribute(string_view_type key, basic_object<CharT, OtherAllocator> value) {
-        ensure_kind(kind::element);
-        attributes_.emplace_back(allocated_string(key, char_allocator(allocator_)), normalize_value(std::move(value)));
-        return *this;
+    [[nodiscard]] const allocator_type& get_allocator() const noexcept {
+        return value_.get_allocator();
     }
 
 private:
-    explicit basic_object(kind value, const allocator_type& allocator = allocator_type())
-                : allocator_(allocator),
-                    type_(value),
-                    name_(char_allocator(allocator)),
-                    members_(member_allocator(allocator)),
-                    elements_(child_allocator(allocator)),
-                    children_(child_allocator(allocator)),
-                    attributes_(attribute_allocator(allocator)) {
-    }
-
-    [[nodiscard]] static scalar_type clone_scalar(const scalar_type& scalar, const allocator_type& allocator) {
-        return std::visit(
-            [&allocator](const auto& value) -> scalar_type {
-                using value_type = std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<value_type, allocated_string>) {
-                    return scalar_type(std::in_place_type<allocated_string>, value, char_allocator(allocator));
-                } else {
-                    return scalar_type(value);
-                }
-            },
-            scalar);
-    }
-
-    [[nodiscard]] static scalar_type move_scalar(scalar_type&& scalar, const allocator_type& allocator) {
-        return std::visit(
-            [&allocator](auto&& value) -> scalar_type {
-                using value_type = std::decay_t<decltype(value)>;
-                if constexpr (std::is_same_v<value_type, allocated_string>) {
-                    return scalar_type(std::in_place_type<allocated_string>, std::forward<value_type>(value), char_allocator(allocator));
-                } else {
-                    return scalar_type(std::forward<value_type>(value));
-                }
-            },
-            std::move(scalar));
-    }
-
-    template<typename OtherAllocator>
-    [[nodiscard]] static scalar_type clone_scalar(
-        const typename basic_object<CharT, OtherAllocator>::scalar_type& scalar,
-        const allocator_type& allocator) {
-        return std::visit(
-            [&allocator](const auto& value) -> scalar_type {
-                using value_type = std::decay_t<decltype(value)>;
-                using other_string = typename basic_object<CharT, OtherAllocator>::allocated_string;
-                if constexpr (std::is_same_v<value_type, other_string>) {
-                    return scalar_type(std::in_place_type<allocated_string>, value.c_str(), char_allocator(allocator));
-                } else {
-                    return scalar_type(value);
-                }
-            },
-            scalar);
-    }
-
-    template<typename OtherAllocator>
-    [[nodiscard]] static scalar_type move_scalar(
-        typename basic_object<CharT, OtherAllocator>::scalar_type&& scalar,
-        const allocator_type& allocator) {
-        return std::visit(
-            [&allocator](auto&& value) -> scalar_type {
-                using value_type = std::decay_t<decltype(value)>;
-                using other_string = typename basic_object<CharT, OtherAllocator>::allocated_string;
-                if constexpr (std::is_same_v<value_type, other_string>) {
-                    return scalar_type(
-                        std::in_place_type<allocated_string>,
-                        std::forward<value_type>(value),
-                        char_allocator(allocator));
-                } else {
-                    return scalar_type(std::forward<value_type>(value));
-                }
-            },
-            std::move(scalar));
-    }
-
-    // Rebinds an incoming node to this object's allocator so child/member storage
-    // stays allocator-consistent even when values are created with a different allocator.
-    [[nodiscard]] basic_object normalize_value(basic_object&& value) const {
-        if (allocators_equal(allocator_, value.allocator())) {
-            return std::move(value);
-        }
-        // TODO: Check this. If the allocators are not equal, we need to rebind the value to this object's allocator.
-        // and deallocate it from the original allocator.  This needs to be a deep copy of the value, and all of its children, members, and attributes.
-        return basic_object(std::allocator_arg, allocator_, std::move(value));
-    }
-
-    template<typename OtherAllocator>
-    [[nodiscard]] basic_object normalize_value(const basic_object<CharT, OtherAllocator>& value) const {
-        return basic_object(std::allocator_arg, allocator_, value);
-    }
-
-    template<typename OtherAllocator>
-    [[nodiscard]] basic_object normalize_value(basic_object<CharT, OtherAllocator>&& value) const {
-        return basic_object(std::allocator_arg, allocator_, std::move(value));
-    }
-
-    template<typename OtherAllocator>
-    void copy_from_other(const basic_object<CharT, OtherAllocator>& other) {
-        type_ = other.type_;
-        name_ = allocated_string(other.name_, char_allocator(allocator_));
-        scalar_ = clone_scalar<OtherAllocator>(other.scalar_, allocator_);
-
-        member_container rebound_members{member_allocator(allocator_)};
-        rebound_members.reserve(other.members_.size());
-        for (const auto& [key, value] : other.members_) {
-            rebound_members.emplace_back(
-                allocated_string(key, char_allocator(allocator_)),
-                basic_object(std::allocator_arg, allocator_, value));
-        }
-
-        child_container rebound_elements{child_allocator(allocator_)};
-        rebound_elements.reserve(other.elements_.size());
-        for (const auto& value : other.elements_) {
-            rebound_elements.push_back(basic_object(std::allocator_arg, allocator_, value));
-        }
-
-        child_container rebound_children{child_allocator(allocator_)};
-        rebound_children.reserve(other.children_.size());
-        for (const auto& value : other.children_) {
-            rebound_children.push_back(basic_object(std::allocator_arg, allocator_, value));
-        }
-
-        attribute_container rebound_attributes{attribute_allocator(allocator_)};
-        rebound_attributes.reserve(other.attributes_.size());
-        for (const auto& [key, value] : other.attributes_) {
-            rebound_attributes.emplace_back(
-                allocated_string(key, char_allocator(allocator_)),
-                basic_object(std::allocator_arg, allocator_, value));
-        }
-
-        members_ = std::move(rebound_members);
-        elements_ = std::move(rebound_elements);
-        children_ = std::move(rebound_children);
-        attributes_ = std::move(rebound_attributes);
-    }
-
-    template<typename OtherAllocator>
-    void move_from_other(basic_object<CharT, OtherAllocator>&& other) {
-        if constexpr (std::is_same_v<OtherAllocator, allocator_type>) {
-            if (allocators_equal(allocator_, other.allocator_)) {
-                type_ = other.type_;
-                name_ = std::move(other.name_);
-                scalar_ = std::move(other.scalar_);
-                members_ = std::move(other.members_);
-                elements_ = std::move(other.elements_);
-                children_ = std::move(other.children_);
-                attributes_ = std::move(other.attributes_);
-                return;
-            }
-        }
-
-        type_ = other.type_;
-        name_ = allocated_string(std::move(other.name_), char_allocator(allocator_));
-        scalar_ = move_scalar<OtherAllocator>(std::move(other.scalar_), allocator_);
-
-        member_container rebound_members{member_allocator(allocator_)};
-        rebound_members.reserve(other.members_.size());
-        for (auto& [key, value] : other.members_) {
-            rebound_members.emplace_back(
-                allocated_string(std::move(key), char_allocator(allocator_)),
-                basic_object(std::allocator_arg, allocator_, std::move(value)));
-        }
-
-        child_container rebound_elements{child_allocator(allocator_)};
-        rebound_elements.reserve(other.elements_.size());
-        for (auto& value : other.elements_) {
-            rebound_elements.push_back(basic_object(std::allocator_arg, allocator_, std::move(value)));
-        }
-
-        child_container rebound_children{child_allocator(allocator_)};
-        rebound_children.reserve(other.children_.size());
-        for (auto& value : other.children_) {
-            rebound_children.push_back(basic_object(std::allocator_arg, allocator_, std::move(value)));
-        }
-
-        attribute_container rebound_attributes{attribute_allocator(allocator_)};
-        rebound_attributes.reserve(other.attributes_.size());
-        for (auto& [key, value] : other.attributes_) {
-            rebound_attributes.emplace_back(
-                allocated_string(std::move(key), char_allocator(allocator_)),
-                basic_object(std::allocator_arg, allocator_, std::move(value)));
-        }
-
-        members_ = std::move(rebound_members);
-        elements_ = std::move(rebound_elements);
-        children_ = std::move(rebound_children);
-        attributes_ = std::move(rebound_attributes);
-    }
-
-    [[nodiscard]] static bool allocators_equal(const allocator_type& lhs, const allocator_type& rhs) {
-        if constexpr (requires(const allocator_type& a, const allocator_type& b) { a == b; }) {
-            return lhs == rhs;
-        } else {
-            return false;
-        }
-    }
-
-    void ensure_kind(kind expected) {
-        if (type_ == kind::null_value) {
-            type_ = expected;
-            return;
-        }
-        if (type_ != expected) {
-            throw std::logic_error("ndof::object kind mismatch");
-        }
-    }
-
-    [[no_unique_address]] allocator_type allocator_{};
-    kind type_{kind::null_value};
-    allocated_string name_;
-    scalar_type scalar_;
-    member_container members_;
-    child_container elements_;
-    child_container children_;
-    attribute_container attributes_;
-
-    template<typename, typename>
-    friend class basic_object;
+    string_type value_;
 };
 
-using object = basic_object<>;
+// Attribute node - represents key-value metadata
+template<typename CharT, allocator_for<CharT> Allocator>
+class attribute_node {
+public:
+    using char_type = CharT;
+    using allocator_type = Allocator;
+    using string_type = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
 
+    attribute_node(const allocator_type& alloc = allocator_type())
+        : name_(alloc), value_(alloc) {}
+    
+    attribute_node(const string_type& n, const string_type& v, const allocator_type& alloc = allocator_type())
+        : name_(n, alloc), value_(v, alloc) {}
+
+    [[nodiscard]] node_kind kind() const noexcept {
+        return node_kind::attribute;
+    }
+
+    [[nodiscard]] const string_type& name() const noexcept {
+        return name_;
+    }
+
+    [[nodiscard]] const string_type& value() const noexcept {
+        return value_;
+    }
+
+    void set_name(const string_type& n) {
+        name_ = n;
+    }
+
+    void set_value(const string_type& v) {
+        value_ = v;
+    }
+
+    [[nodiscard]] const allocator_type& get_allocator() const noexcept {
+        return name_.get_allocator();
+    }
+
+private:
+    string_type name_;
+    string_type value_;
+};
+
+// Comment node - represents metadata/comments (XML comments, YAML comments)
+template<typename CharT, typename Allocator>
+class comment_node {
+public:
+    using char_type = CharT;
+    using allocator_type = Allocator;
+    using string_type = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
+
+    comment_node(const allocator_type& alloc = allocator_type())
+        : content_(alloc) {}
+    
+    comment_node(const string_type& c, const allocator_type& alloc = allocator_type())
+        : content_(c, alloc) {}
+
+    [[nodiscard]] node_kind kind() const noexcept {
+        return node_kind::comment;
+    }
+
+    [[nodiscard]] const string_type& content() const noexcept {
+        return content_;
+    }
+
+    void set_content(const string_type& c) {
+        content_ = c;
+    }
+
+    [[nodiscard]] const allocator_type& get_allocator() const noexcept {
+        return content_.get_allocator();
+    }
+
+private:
+    string_type content_;
+};
+
+// Forward declaration of basic_object for variant
+template<typename CharT, typename Allocator>
+class basic_object;
+
+// Node variant holding all possible node types
+template<typename CharT, allocator_for<CharT> Allocator>
+using node_variant = std::variant<
+    std::monostate,
+    text_node<CharT, Allocator>,
+    attribute_node<CharT, Allocator>,
+    comment_node<CharT, Allocator>,
+    std::vector<basic_object<CharT, Allocator>, Allocator>
+>;
+
+// Main object class - supports XML, JSON, YAML parsing
+template<typename CharT = char, typename Allocator = std::allocator<CharT>>
+class basic_object {
+public:
+    using char_type = CharT;
+    using allocator_type = Allocator;
+    using string_type = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
+    using string_view_type = std::basic_string_view<CharT, std::char_traits<CharT>>;
+    using text_node_type = text_node<CharT, Allocator>;
+    using attribute_node_type = attribute_node<CharT, Allocator>;
+    using comment_node_type = comment_node<CharT, Allocator>;
+    using variant_type = node_variant<CharT, Allocator>;
+    using attributes_map = std::vector<
+        std::pair<string_type, string_type>,
+        typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<string_type, string_type>>
+    >;
+    using members_map = std::vector<
+        std::pair<string_type, basic_object>,
+        typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<string_type, basic_object>>
+    >;
+    using sequence_type = std::vector<basic_object, Allocator>;
+
+    enum class kind : std::uint8_t {
+        null = 0,
+        element = 1,
+        text = 2,
+        sequence = 3,
+        mapping = 4,
+        comment = 5
+    };
+
+    // Constructors
+    basic_object(const allocator_type& alloc = allocator_type())
+        : name_(alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc) {}
+    
+    basic_object(kind k, const allocator_type& alloc = allocator_type())
+        : name_(alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc), kind_(k) {
+        initialize_for_kind(k);
+    }
+
+    basic_object(const string_type& n, const allocator_type& alloc = allocator_type())
+        : name_(n, alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc) {}
+
+    basic_object(const string_type& n, kind k, const allocator_type& alloc = allocator_type())
+        : name_(n, alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc), kind_(k) {
+        initialize_for_kind(k);
+    }
+
+    [[nodiscard]] kind type() const noexcept {
+        return kind_;
+    }
+
+    [[nodiscard]] const string_type& name() const noexcept {
+        return name_;
+    }
+
+    void set_name(const string_type& n) {
+        name_ = n;
+    }
+
+    [[nodiscard]] const allocator_type& allocator() const noexcept {
+        return allocator_;
+    }
+
+    // Attribute operations
+    [[nodiscard]] const attributes_map& attributes() const noexcept {
+        return attributes_;
+    }
+
+    [[nodiscard]] attributes_map& attributes() noexcept {
+        return attributes_;
+    }
+
+    void add_attribute(const string_type& attr_name, const string_type& attr_value) {
+        attributes_.emplace_back(attr_name, attr_value);
+    }
+
+    void add_attribute(string_type&& attr_name, string_type&& attr_value) {
+        attributes_.emplace_back(std::move(attr_name), std::move(attr_value));
+    }
+
+    [[nodiscard]] bool remove_attribute(const string_view_type& attr_name) {
+        auto it = std::find_if(attributes_.begin(), attributes_.end(),
+            [attr_name](const auto& pair) { return pair.first == attr_name; });
+        if (it != attributes_.end()) {
+            attributes_.erase(it);
+            return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] std::optional<string_type> get_attribute(const string_view_type& attr_name) const {
+        auto it = std::find_if(attributes_.begin(), attributes_.end(),
+            [attr_name](const auto& pair) { return pair.first == attr_name; });
+        if (it != attributes_.end()) {
+            return it->second;
+        }
+        return std::nullopt;
+    }
+
+    // Member/mapping operations
+    [[nodiscard]] const members_map& members() const noexcept {
+        return members_;
+    }
+
+    [[nodiscard]] members_map& members() noexcept {
+        return members_;
+    }
+
+    [[nodiscard]] basic_object* add_member(const string_type& member_name) {
+        members_.emplace_back(member_name, basic_object(allocator_));
+        return &members_.back().second;
+    }
+
+    [[nodiscard]] basic_object* add_member(const string_type& member_name, kind k) {
+        members_.emplace_back(member_name, basic_object(allocator_type(), k));
+        return &members_.back().second;
+    }
+
+    [[nodiscard]] bool remove_member(const string_view_type& member_name) {
+        auto it = std::find_if(members_.begin(), members_.end(),
+            [member_name](const auto& pair) { return pair.first == member_name; });
+        if (it != members_.end()) {
+            members_.erase(it);
+            return true;
+        }
+        return false;
+    }
+
+    [[nodiscard]] basic_object* get_member(const string_view_type& member_name) {
+        auto it = std::find_if(members_.begin(), members_.end(),
+            [member_name](const auto& pair) { return pair.first == member_name; });
+        if (it != members_.end()) {
+            return &it->second;
+        }
+        return nullptr;
+    }
+
+    [[nodiscard]] const basic_object* get_member(const string_view_type& member_name) const {
+        auto it = std::find_if(members_.begin(), members_.end(),
+            [member_name](const auto& pair) { return pair.first == member_name; });
+        if (it != members_.end()) {
+            return &it->second;
+        }
+        return nullptr;
+    }
+
+    // Sequence/array operations
+    [[nodiscard]] sequence_type& elements() noexcept {
+        if (kind_ == kind::sequence) {
+            return std::get<sequence_type>(value_);
+        }
+        static sequence_type empty_seq(allocator_);
+        return empty_seq;
+    }
+
+    [[nodiscard]] const sequence_type& elements() const noexcept {
+        if (kind_ == kind::sequence) {
+            return std::get<sequence_type>(value_);
+        }
+        static const sequence_type empty_seq(allocator_);
+        return empty_seq;
+    }
+
+    [[nodiscard]] basic_object* add_element() {
+        if (kind_ != kind::sequence) {
+            kind_ = kind::sequence;
+            value_ = sequence_type(allocator_);
+        }
+        auto& seq = std::get<sequence_type>(value_);
+        seq.emplace_back(allocator_);
+        return &seq.back();
+    }
+
+    [[nodiscard]] basic_object* add_element(kind k) {
+        if (kind_ != kind::sequence) {
+            kind_ = kind::sequence;
+            value_ = sequence_type(allocator_);
+        }
+        auto& seq = std::get<sequence_type>(value_);
+        seq.emplace_back(allocator_type(), k);
+        return &seq.back();
+    }
+
+    [[nodiscard]] bool remove_element(std::size_t index) {
+        if (kind_ != kind::sequence || index >= std::get<sequence_type>(value_).size()) {
+            return false;
+        }
+        auto& seq = std::get<sequence_type>(value_);
+        seq.erase(seq.begin() + static_cast<std::ptrdiff_t>(index));
+        return true;
+    }
+
+    [[nodiscard]] basic_object* get_element(std::size_t index) {
+        if (kind_ != kind::sequence || index >= std::get<sequence_type>(value_).size()) {
+            return nullptr;
+        }
+        return &std::get<sequence_type>(value_)[index];
+    }
+
+    [[nodiscard]] const basic_object* get_element(std::size_t index) const {
+        if (kind_ != kind::sequence || index >= std::get<sequence_type>(value_).size()) {
+            return nullptr;
+        }
+        return &std::get<sequence_type>(value_)[index];
+    }
+
+    // Text value operations
+    [[nodiscard]] std::optional<string_type> text_value() const {
+        if (kind_ == kind::text) {
+            return std::get<text_node_type>(value_).value();
+        }
+        return std::nullopt;
+    }
+
+    void set_text_value(const string_type& val) {
+        kind_ = kind::text;
+        value_ = text_node_type(val, allocator_);
+    }
+
+    void set_text_value(string_type&& val) {
+        kind_ = kind::text;
+        value_ = text_node_type(std::move(val), allocator_);
+    }
+
+    // Comment operations
+    [[nodiscard]] std::optional<string_type> comment() const {
+        if (kind_ == kind::comment) {
+            return std::get<comment_node_type>(value_).content();
+        }
+        return std::nullopt;
+    }
+
+    void set_comment(const string_type& content) {
+        kind_ = kind::comment;
+        value_ = comment_node_type(content, allocator_);
+    }
+
+    // Visitor support
+    template<typename Visitor>
+    [[nodiscard]] decltype(auto) visit(Visitor&& v) {
+        return visit_impl(std::forward<Visitor>(v), std::integral_constant<bool, std::is_const_v<Visitor>>{});
+    }
+
+    template<typename Visitor>
+    [[nodiscard]] decltype(auto) visit(Visitor&& v) const {
+        switch (kind_) {
+            case kind::null:
+                return v.visit_null(*this);
+            case kind::element:
+                return v.visit_element(*this);
+            case kind::text:
+                return v.visit_text(*this);
+            case kind::sequence:
+                return v.visit_sequence(*this);
+            case kind::mapping:
+                return v.visit_mapping(*this);
+            case kind::comment:
+                return v.visit_comment(*this);
+        }
+        throw std::logic_error("Invalid node kind");
+    }
+
+private:
+    void initialize_for_kind(kind k) {
+        switch (k) {
+            case kind::null:
+                value_ = std::monostate{};
+                break;
+            case kind::sequence:
+                value_ = sequence_type(allocator_);
+                break;
+            case kind::text:
+                value_ = text_node_type(allocator_);
+                break;
+            case kind::comment:
+                value_ = comment_node_type(allocator_);
+                break;
+            case kind::element:
+            case kind::mapping:
+            default:
+                value_ = std::monostate{};
+                break;
+        }
+        kind_ = k;
+    }
+
+    template<typename Visitor>
+    [[nodiscard]] decltype(auto) visit_impl(Visitor&& v, std::false_type) {
+        switch (kind_) {
+            case kind::null:
+                return v.visit_null(*this);
+            case kind::element:
+                return v.visit_element(*this);
+            case kind::text:
+                return v.visit_text(*this);
+            case kind::sequence:
+                return v.visit_sequence(*this);
+            case kind::mapping:
+                return v.visit_mapping(*this);
+            case kind::comment:
+                return v.visit_comment(*this);
+        }
+        throw std::logic_error("Invalid node kind");
+    }
+
+    string_type name_;
+    variant_type value_;
+    attributes_map attributes_;
+    members_map members_;
+    allocator_type allocator_;
+    kind kind_{kind::null};
+};
+
+// Type aliases
+using object = basic_object<char, std::allocator<char>>;
+using wobject = basic_object<wchar_t, std::allocator<wchar_t>>;
+
+};
 namespace detail {
 
 template<typename CharT, typename Traits, typename Alloc>

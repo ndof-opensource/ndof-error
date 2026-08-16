@@ -41,7 +41,8 @@ endif()
 
 add_library(error
     src/version.cpp
-    src/configs.cpp)
+    src/configs.cpp
+    include/ndof/error/fixed_string.hpp)
 add_library(ndof::error ALIAS error)
 
 set_target_properties(error PROPERTIES
