@@ -3,7 +3,7 @@
 
 // #include "ndof/error/fixed_string.hpp"
 #include "ndof/error/allocator_support.hpp"
-#include "fixed_string.hpp"
+#include "ndof/error/fixed_string.hpp"
  
 // TODO: Move this to the core library.
 // TODO: Make sure the method classifier stuff specializes on noexcept.
@@ -51,7 +51,7 @@ struct node_type_traits {
 };
 
 // Text node - represents scalar values (JSON string, number, boolean, null)
-template<typename CharT, allocator_for<CharT> Allocator>
+template<typename CharT, allocator_like Allocator>
 class text_node {
 public:
     using char_type = CharT;
@@ -661,7 +661,7 @@ template<std::size_t SegmentCount, std::size_t MaxNameLength>
     return result;
 }
 
-template<fixed_string Path>
+template<ndof::fixed_string Path>
 struct parsed_path {
     static constexpr auto raw = Path.view();
     static constexpr std::size_t segment_count = count_segments(raw);
@@ -798,7 +798,7 @@ void append_matches_for_segment(Node& current, const path_segment<MaxNameLength>
 template<fixed_string Path, std::size_t SegmentIndex>
 struct path_evaluator {
     template<typename Pointer, typename CharT, typename Allocator>
-    [[nodiscard]] static auto run(const pointer_vector<basic_object<CharT, Allocator>, Pointer>& current_nodes, const Allocator& allocator) {
+    [[nodiscard]] static auto run(const pointer_vector<ndof::basic_object<CharT, Allocator>, Pointer>& current_nodes, const Allocator& allocator) {
         using object_type = basic_object<CharT, Allocator>;
         using result_type = pointer_vector<object_type, Pointer>;
 

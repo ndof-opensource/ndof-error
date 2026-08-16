@@ -48,10 +48,6 @@ template<typename T>
 concept allocator_like =
     requires(const T& value) {
         typename T::value_type;
-        typename T::pointer;
-        typename T::const_pointer;
-        typename T::void_pointer;
-        typename T::const_void_pointer;
     } 
     && std::is_default_constructible_v<T> 
     && std::is_copy_constructible_v<T> 

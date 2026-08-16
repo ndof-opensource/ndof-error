@@ -5,39 +5,47 @@
 #include <array>
 #include <string_view>
 #include <algorithm>
+#include <type_traits>
 
 namespace ndof {
 
-template <typename CharT, std::size_t N>
-struct fixed_string {
- 
-    constexpr fixed_string() = delete;
+// TODO: Replace with one_of and put this in core.
+template <typename T> 
+concept character_type = requires(T) {
+        std::is_same_v<std::remove_cv_t<T>, char> ||
+        std::is_same_v<std::remove_cv_t<T>, wchar_t> ||
+        std::is_same_v<std::remove_cv_t<T>, char16_t> ||
+        std::is_same_v<std::remove_cv_t<T>, char32_t>;
+};
 
-    constexpr fixed_string(const CharT (&str)[N]) {
+template <character_type CharT, std::size_t N>
+struct fixed_string  {
+private:
+    using char_type = CharT;
+    std::array<CharT, N> data;
+
+public:
+    constexpr fixed_string(const CharT (&str)[N])  {
         std::copy_n(str, N, data.begin());
     }
 
-    [[nodiscard]] constexpr std::size_t length() const {
-        return N-1;
-    }
-
-    constexpr bool operator==(const fixed_string& other) const {
-        return std::equal(data.begin(), data.begin() + length(),
-                         other.data.begin(), other.data.begin() + other.length());
-    }
-
     [[nodiscard]] constexpr std::string_view view() const {
-        return std::string_view(data.data(), length());
+        return std::basic_string_view<CharT>(data.data(), N);
     }
 
-    private:
-    std::array<CharT, N> data{};
+    [[nodiscard]] constexpr const CharT* c_str() const {
+        return data.data();
+    }
+
+    [[nodiscard]] constexpr std::size_t length() const {
+        return N;
+    }
 };
 
-// Deduction guide for fixed_string
-template <typename CharT, std::size_t N>
+template <character_type CharT, std::size_t N>  
 fixed_string(const CharT (&)[N]) -> fixed_string<CharT, N>;
 
-}
+
+} // namespace ndof
 #endif
 
