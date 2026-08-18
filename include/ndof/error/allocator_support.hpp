@@ -49,13 +49,11 @@ concept allocator_value_gettable =
 template<typename T>
 concept allocator_like =
     ndof::has_allocator_definitions<T> &&
-    requires(const T& value) {
-        typename T::value_type;
-        requires std::same_as<
-            typename T::value_type,
-            typename std::allocator_traits<T>::value_type>;
-        { value.get_allocator() } -> std::same_as<T>;
-    };
+    allocator_value_gettable<T> &&
+    std::constructible_from<T, const typename T::allocator_type&> &&
+    std::constructible_from<typename T::allocator_type, const T&> &&
+    std::destructible<T>;
+
 
 // TODO: add has a get_value check here somehow.
 
