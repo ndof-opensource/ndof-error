@@ -5,7 +5,11 @@
 #include <cstdint>
 #include <string_view>
 
+// Captures a boolean test value together with the original expression text.
+// Example: auto [passed, name] = NDOF_CAPTURE_BOOL_TEST(x > 0);
+#define NDOF_CAPTURE_BOOL_TEST(test_expression) static_cast<bool>(test_expression), #test_expression
 
+ 
 #if defined(NDOF_RTTI_ENABLED) && (NDOF_RTTI_ENABLED)
 #include <typeindex>
 using type_token = std::type_index;

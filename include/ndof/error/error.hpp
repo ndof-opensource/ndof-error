@@ -1,4 +1,7 @@
 #include "ndof/error/configs.hpp"
+#include "ndof/error/allocator_support.hpp"
+#include <source_location>
+
 
 namespace ndof::error {
 
@@ -21,9 +24,12 @@ namespace detail {
 //     }
 // }
 
+// TODO: Link to the design library and use icloneable.
+
 // template<typename T, allocator_like Allocator>
 // requires (!allocator_aware_copy_propagating<T>)
 // [[nodiscard]] T copy_considering_allocators(const T& value, [[maybe_unused]] const Allocator& allocator) {
+// // Question: Should this silently ignore the allocator?
 //     return value;
 // }
 

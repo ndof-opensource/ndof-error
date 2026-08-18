@@ -1,4 +1,5 @@
- 
+#if !defined(NDOF_ERROR_ALLOCATOR_SUPPORT_HPP)
+#define NDOF_ERROR_ALLOCATOR_SUPPORT_HPP
 #include "ndof/error/configs.hpp"
 #include <concepts>
 #include <expected>
@@ -44,25 +45,33 @@ concept allocator_value_gettable =
         { value.get_value() } -> std::same_as<typename T::allocator_type>;
 };
 
+
 template<typename T>
 concept allocator_like =
+    ndof::has_allocator_definitions<T> &&
     requires(const T& value) {
         typename T::value_type;
-    } 
-    && std::is_default_constructible_v<T> 
-    && std::is_copy_constructible_v<T> 
-    && std::is_copy_assignable_v<T> 
-    && std::is_move_constructible_v<T>
-    && std::is_move_assignable_v<T>
-    && std::is_destructible_v<T>
-    && std::equality_comparable<T>;
+        requires std::same_as<
+            typename T::value_type,
+            typename std::allocator_traits<T>::value_type>;
+        { value.get_allocator() } -> std::same_as<T>;
+    };
 
 // TODO: add has a get_value check here somehow.
 
 template<typename Allocator, typename ValueType>
 concept allocator_for = 
     ndof::allocator_like<Allocator> &&
-    std::same_as<typename std::allocator_traits<Allocator>::value_type, ValueType>;
+    requires {
+        typename ValueType::allocator_type;
+        typename std::allocator_traits<Allocator>::template rebind_alloc<ValueType>;
+    } &&
+    std::same_as<
+        typename ValueType::allocator_type,
+        typename std::allocator_traits<Allocator>::template rebind_alloc<ValueType>> &&
+    std::constructible_from<
+        typename std::allocator_traits<Allocator>::template rebind_alloc<ValueType>,
+        const Allocator&>;
 
 template<typename Allocator, typename ExpectedAllocator>
 concept allocator_compatible_with =
@@ -88,3 +97,6 @@ concept allocator_aware_move_propagating =
     } && std::allocator_traits<typename T::allocator_type>::propagate_on_container_move_assignment::value;
  
 } // namespace ndof
+
+#endif
+
