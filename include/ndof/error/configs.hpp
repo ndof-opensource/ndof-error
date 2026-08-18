@@ -1,6 +1,9 @@
 // Copyright 2026 The ndof Authors
 // SPDX-License-Identifier: Apache-2.0
 
+#ifndef NDOF_ERROR_CONFIGS_HPP
+#define NDOF_ERROR_CONFIGS_HPP
+
 
 #include <cstdint>
 #include <string_view>
@@ -54,3 +57,5 @@ template<typename T>
 [[nodiscard]] std::string_view get_type_index_mode_name() noexcept;
 
 }  
+
+#endif // NDOF_ERROR_CONFIGS_HPP

@@ -54,7 +54,6 @@ concept allocator_like =
     std::constructible_from<typename T::allocator_type, const T&> &&
     std::destructible<T>;
 
-
 // TODO: add has a get_value check here somehow.
 
 template<typename Allocator, typename ValueType>
