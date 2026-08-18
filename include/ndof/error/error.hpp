@@ -1,5 +1,6 @@
 #include "ndof/error/configs.hpp"
 #include "ndof/error/allocator_support.hpp"
+#include "ndof/error/object.hpp"
 #include <source_location>
 
 
@@ -93,6 +94,12 @@ namespace detail {
 
 // TODO: should define stream to object operators.
  
+// TODO: Should be IColoneable. 
+//       Should be Iserializable. 
+//       Should be IDeserializable. 
+//       Should be IStreamable. 
+//       Should be IStreamableToObject. 
+//       Should be IStreamableFromObject.
 
 template<typename CharT = char >
 struct basic_exception : std::exception  {
@@ -119,7 +126,7 @@ public:
     void virtual rethrow() const = 0;
 
     template<ndof::allocator_for<CharT> allocator>
-    [[nodiscard]] std::expected<void, std::exception> to_object(basic_object<CharT, allocator>& obj) const noexcept;
+    [[nodiscard]] std::expected<void, std::exception> to_object(basic_object<CharT>& obj) const noexcept;
 
     virtual std::expected<void, std::exception> to_object_impl()
 

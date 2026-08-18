@@ -1,19 +1,17 @@
 // Copyright 2026 The ndof Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// #include "ndof/error/fixed_string.hpp"
 #include "ndof/error/allocator_support.hpp"
-#include "ndof/error/fixed_string.hpp"
  
 // TODO: Move this to the core library.
 // TODO: Make sure the method classifier stuff specializes on noexcept.
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <source_location>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -27,11 +25,12 @@
 namespace ndof {
 
 // Forward declarations
-template<typename CharT, typename Allocator>
+template<typename CharT, allocator_like Allocator>
 class basic_object;
 
 // Node type enumeration
 enum class node_kind {
+    undefined,
     null,
     element,
     attribute,
@@ -41,13 +40,54 @@ enum class node_kind {
     comment
 };
 
+constexpr auto expected_name(node_kind kind) {
+    switch (kind) {
+        case node_kind::undefined: return "undefined";
+        case node_kind::null: return "null";
+        case node_kind::element: return "element";
+        case node_kind::attribute: return "attribute";
+        case node_kind::text: return "text";
+        case node_kind::sequence: return "sequence";
+        case node_kind::mapping: return "mapping";
+        case node_kind::comment: return "comment";
+        default: break;
+    }
+    return "invalid";
+}
+
 // Node type traits
-template<typename CharT, allocator_for<CharT> Allocator>
+template<typename CharT, allocator_like Allocator>
 struct node_type_traits {
     using char_type = CharT;
     using allocator_type = Allocator;
     using string_type = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
     using object_type = basic_object<CharT, Allocator>;
+    using sequence_type = std::vector<object_type, Allocator>;
+    using attribute_type = std::pair<string_type, string_type>;
+    using attributes_map = std::vector<
+        attribute_type,
+        typename std::allocator_traits<Allocator>::template rebind_alloc<attribute_type>>;
+};
+
+struct mismatch_state {
+    node_kind&  expected;
+    std::size_t variant_index;
+    std::source_location& location;
+    const char* expected_name;
+
+    std::logic_error to_exception() const {
+        return std::logic_error(
+            std::string("Node kind does not match variant type: expected '")
+            + std::string(expected_name)
+            + "', variant index "
+            + std::to_string(variant_index)
+            + " at "
+            + location.file_name()
+            + ":"
+            + std::to_string(location.line())
+            + ":"
+            + std::to_string(location.column()));
+    }
 };
 
 // Text node - represents scalar values (JSON string, number, boolean, null)
@@ -60,10 +100,24 @@ public:
 
     text_node(const allocator_type& alloc = allocator_type())
         : value_(alloc) {}
-    
+
+    template<typename OtherAllocator>
+        requires allocator_compatible_with<OtherAllocator, allocator_type>
+    text_node(
+        const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& val,
+        const OtherAllocator& alloc = OtherAllocator())
+        : value_(val.begin(), val.end(), allocator_type(alloc)) {}
+
+    template<typename OtherAllocator>
+        requires allocator_compatible_with<OtherAllocator, allocator_type>
+    text_node(
+        std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>&& val,
+        const OtherAllocator& alloc = OtherAllocator())
+        : value_(std::make_move_iterator(val.begin()), std::make_move_iterator(val.end()), alloc) {}
+
     text_node(const string_type& val, const allocator_type& alloc = allocator_type())
         : value_(val, alloc) {}
-    
+
     text_node(string_type&& val, const allocator_type& alloc = allocator_type())
         : value_(std::move(val), alloc) {}
 
@@ -92,22 +146,41 @@ private:
 };
 
 // Attribute node - represents key-value metadata
-template<typename CharT, allocator_for<CharT> Allocator>
+template<typename CharT, allocator_like Allocator>
 class attribute_node {
 public:
     using char_type = CharT;
     using allocator_type = Allocator;
     using string_type = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
 
+
     attribute_node(const allocator_type& alloc = allocator_type())
         : name_(alloc), value_(alloc) {}
-    
-    attribute_node(const string_type& n, const string_type& v, const allocator_type& alloc = allocator_type())
-        : name_(n, alloc), value_(v, alloc) {}
 
-    [[nodiscard]] node_kind kind() const noexcept {
-        return node_kind::attribute;
-    }
+    template<typename OtherAllocator>
+        requires allocator_compatible_with<OtherAllocator, allocator_type>
+    attribute_node(
+        const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& name,
+        const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& value,
+        const OtherAllocator& alloc = OtherAllocator())
+        : name_(name.begin(), name.end(), allocator_type(alloc)),
+          value_(value.begin(), value.end(), allocator_type(alloc)) {}
+
+
+    // Select the allocator rather than moving it from either source string.
+    template<typename OtherAllocator>
+        requires allocator_compatible_with<OtherAllocator, allocator_type>
+    attribute_node(
+        std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>&& name,
+        std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>&& value,
+        const OtherAllocator& alloc = OtherAllocator())
+                : name_(std::make_move_iterator(name.begin()), std::make_move_iterator(name.end()), alloc),
+                  value_(std::make_move_iterator(value.begin()), std::make_move_iterator(value.end()), alloc) {
+
+        }
+
+    attribute_node(const string_type& name, const string_type& value, const allocator_type& alloc = allocator_type())
+        : name_(name, alloc), value_(value, alloc) {}
 
     [[nodiscard]] const string_type& name() const noexcept {
         return name_;
@@ -144,9 +217,26 @@ public:
 
     comment_node(const allocator_type& alloc = allocator_type())
         : content_(alloc) {}
-    
+
+    template<typename OtherAllocator>
+        requires allocator_compatible_with<OtherAllocator, allocator_type>
+    comment_node(
+        const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& c,
+        const OtherAllocator& alloc = OtherAllocator())
+        : content_(c.begin(), c.end(), allocator_type(alloc)) {}
+
+    template<typename OtherAllocator>
+        requires allocator_compatible_with<OtherAllocator, allocator_type>
+    comment_node(
+        std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>&& c,
+        const OtherAllocator& alloc = OtherAllocator())
+        : content_(std::make_move_iterator(c.begin()), std::make_move_iterator(c.end()), alloc) {}
+
     comment_node(const string_type& c, const allocator_type& alloc = allocator_type())
         : content_(c, alloc) {}
+
+    comment_node(string_type&& c, const allocator_type& alloc = allocator_type())
+        : content_(std::move(c), alloc) {}
 
     [[nodiscard]] node_kind kind() const noexcept {
         return node_kind::comment;
@@ -169,11 +259,11 @@ private:
 };
 
 // Forward declaration of basic_object for variant
-template<typename CharT, typename Allocator>
+template<typename CharT, allocator_like  Allocator>
 class basic_object;
 
 // Node variant holding all possible node types
-template<typename CharT, allocator_for<CharT> Allocator>
+template<typename CharT, allocator_like  Allocator>
 using node_variant = std::variant<
     std::monostate,
     text_node<CharT, Allocator>,
@@ -182,8 +272,12 @@ using node_variant = std::variant<
     std::vector<basic_object<CharT, Allocator>, Allocator>
 >;
 
+
+
+// TODO: Update the template argument list to accept a CharTraits template parameter for the string type, so that we can support custom character traits.
+//       That should be done throughout the entire library, so that we can support custom character traits for the string type.
 // Main object class - supports XML, JSON, YAML parsing
-template<typename CharT = char, typename Allocator = std::allocator<CharT>>
+template<typename CharT = char, allocator_like Allocator = std::allocator<CharT>>
 class basic_object {
 public:
     using char_type = CharT;
@@ -194,45 +288,50 @@ public:
     using attribute_node_type = attribute_node<CharT, Allocator>;
     using comment_node_type = comment_node<CharT, Allocator>;
     using variant_type = node_variant<CharT, Allocator>;
+    using attribute_type = std::pair<string_type, string_type>;
     using attributes_map = std::vector<
-        std::pair<string_type, string_type>,
-        typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<string_type, string_type>>
-    >;
+        attribute_type,
+        typename std::allocator_traits<Allocator>::template rebind_alloc<attribute_type>>;
     using members_map = std::vector<
         std::pair<string_type, basic_object>,
         typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<string_type, basic_object>>
     >;
     using sequence_type = std::vector<basic_object, Allocator>;
 
-    enum class kind : std::uint8_t {
-        null = 0,
-        element = 1,
-        text = 2,
-        sequence = 3,
-        mapping = 4,
-        comment = 5
-    };
-
+    
     // Constructors
     basic_object(const allocator_type& alloc = allocator_type())
         : name_(alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc) {}
-    
-    basic_object(kind k, const allocator_type& alloc = allocator_type())
-        : name_(alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc), kind_(k) {
+
+    basic_object(node_kind k, const allocator_type& alloc = allocator_type())
+        : name_(alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc) {
         initialize_for_kind(k);
     }
+
+    template<typename OtherAllocator>
+        requires allocator_compatible_with<OtherAllocator, allocator_type>
+    basic_object(
+        const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& n,
+        const OtherAllocator& alloc = OtherAllocator())
+        : name_(n.begin(), n.end(), allocator_type(alloc)), value_(std::monostate{}),
+          attributes_(allocator_type(alloc)), members_(allocator_type(alloc)), allocator_(alloc) {}
+
+    template<typename OtherAllocator>
+        requires allocator_compatible_with<OtherAllocator, allocator_type>
+    basic_object(
+        std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>&& n,
+        const OtherAllocator& alloc = OtherAllocator())
+        : name_(std::make_move_iterator(n.begin()), std::make_move_iterator(n.end()), allocator_type(alloc)),
+          value_(std::monostate{}), attributes_(allocator_type(alloc)), members_(allocator_type(alloc)),
+          allocator_(alloc) {}
 
     basic_object(const string_type& n, const allocator_type& alloc = allocator_type())
         : name_(n, alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc) {}
 
-    basic_object(const string_type& n, kind k, const allocator_type& alloc = allocator_type())
-        : name_(n, alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc), kind_(k) {
-        initialize_for_kind(k);
-    }
+    basic_object(string_type&& n, const allocator_type& alloc = allocator_type())
+        : name_(std::move(n), alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc) {}
 
-    [[nodiscard]] kind type() const noexcept {
-        return kind_;
-    }
+   
 
     [[nodiscard]] const string_type& name() const noexcept {
         return name_;
@@ -296,8 +395,8 @@ public:
         return &members_.back().second;
     }
 
-    [[nodiscard]] basic_object* add_member(const string_type& member_name, kind k) {
-        members_.emplace_back(member_name, basic_object(allocator_type(), k));
+    [[nodiscard]] basic_object* add_member(const string_type& member_name, node_kind k) {
+        members_.emplace_back(member_name, basic_object(k, allocator_type()));
         return &members_.back().second;
     }
 
@@ -331,7 +430,7 @@ public:
 
     // Sequence/array operations
     [[nodiscard]] sequence_type& elements() noexcept {
-        if (kind_ == kind::sequence) {
+        if (std::holds_alternative<sequence_type>(value_)) {
             return std::get<sequence_type>(value_);
         }
         static sequence_type empty_seq(allocator_);
@@ -339,7 +438,7 @@ public:
     }
 
     [[nodiscard]] const sequence_type& elements() const noexcept {
-        if (kind_ == kind::sequence) {
+        if (std::holds_alternative<sequence_type>(value_)) {
             return std::get<sequence_type>(value_);
         }
         static const sequence_type empty_seq(allocator_);
@@ -347,8 +446,7 @@ public:
     }
 
     [[nodiscard]] basic_object* add_element() {
-        if (kind_ != kind::sequence) {
-            kind_ = kind::sequence;
+        if (!std::holds_alternative<sequence_type>(value_)) {
             value_ = sequence_type(allocator_);
         }
         auto& seq = std::get<sequence_type>(value_);
@@ -356,9 +454,8 @@ public:
         return &seq.back();
     }
 
-    [[nodiscard]] basic_object* add_element(kind k) {
-        if (kind_ != kind::sequence) {
-            kind_ = kind::sequence;
+    [[nodiscard]] basic_object* add_element(node_kind k) {
+        if (!std::holds_alternative<sequence_type>(value_)) {
             value_ = sequence_type(allocator_);
         }
         auto& seq = std::get<sequence_type>(value_);
@@ -367,7 +464,7 @@ public:
     }
 
     [[nodiscard]] bool remove_element(std::size_t index) {
-        if (kind_ != kind::sequence || index >= std::get<sequence_type>(value_).size()) {
+        if (!std::holds_alternative<sequence_type>(value_) || index >= std::get<sequence_type>(value_).size()) {
             return false;
         }
         auto& seq = std::get<sequence_type>(value_);
@@ -376,113 +473,146 @@ public:
     }
 
     [[nodiscard]] basic_object* get_element(std::size_t index) {
-        if (kind_ != kind::sequence || index >= std::get<sequence_type>(value_).size()) {
+        const auto elements = get_node<sequence_type>();
+        if (!elements || index >= (*elements)->size()) {
             return nullptr;
         }
-        return &std::get<sequence_type>(value_)[index];
+        return &(*elements)->operator[](index);
     }
 
     [[nodiscard]] const basic_object* get_element(std::size_t index) const {
-        if (kind_ != kind::sequence || index >= std::get<sequence_type>(value_).size()) {
+        const auto elements = get_node<sequence_type>();
+        if (!elements || index >= (*elements)->size()) {
             return nullptr;
         }
-        return &std::get<sequence_type>(value_)[index];
+        return &(*elements)->operator[](index);
     }
 
     // Text value operations
     [[nodiscard]] std::optional<string_type> text_value() const {
-        if (kind_ == kind::text) {
-            return std::get<text_node_type>(value_).value();
+        if (const auto* text = get_node<text_node_type>()) {
+            return text->value();
         }
         return std::nullopt;
     }
 
     void set_text_value(const string_type& val) {
-        kind_ = kind::text;
         value_ = text_node_type(val, allocator_);
     }
 
     void set_text_value(string_type&& val) {
-        kind_ = kind::text;
         value_ = text_node_type(std::move(val), allocator_);
+    }
+
+    template<typename Node>
+    [[nodiscard]] std::optional<Node*> get_node() noexcept {
+        return std::get_if<Node>(&value_);
+    }
+
+    template<typename Node>
+    [[nodiscard]] std::optional<const Node*> get_node() const noexcept {
+        std::optional<const Node*> result;
+        if (const auto* ptr = std::get_if<Node>(&value_)) {
+            result = ptr;
+        }
+        return result;
     }
 
     // Comment operations
     [[nodiscard]] std::optional<string_type> comment() const {
-        if (kind_ == kind::comment) {
-            return std::get<comment_node_type>(value_).content();
+        // TODO: Return the comment content if the node is a comment node, otherwise return std::nullopt.
+        if (const auto* comment = get_node<comment_node_type>()) {
+            return comment->content();
         }
         return std::nullopt;
     }
 
     void set_comment(const string_type& content) {
-        kind_ = kind::comment;
         value_ = comment_node_type(content, allocator_);
     }
 
+private:
+    // TODO: Update this to check for the exception compiler flag, otherwise, return an ndof_return which will be used to
+    //       redefine the return type based on whether exceptions are enabled or not. 
+    //       If no exceptions, the return type will be an expected<T, E> type, otherwise it will be T, in this case, void.
+
+ 
+    node_kind get_node_kind(const node_variant<CharT, Allocator>& value_)  noexcept {
+        if (std::holds_alternative<std::monostate>(value_)) {
+            if (!members_.empty()) {
+                return node_kind::mapping;
+            }
+            if (!name_.empty() || !attributes_.empty()) {
+                return node_kind::element;
+            }
+            return node_kind::null;
+        }
+        if (std::holds_alternative<text_node_type>(value_)) {
+            return node_kind::text;
+        }
+        if (std::holds_alternative<attribute_node_type>(value_)) {
+            return node_kind::attribute;
+        }
+        if (std::holds_alternative<comment_node_type>(value_)) {
+            return node_kind::comment;
+        }
+        if (std::holds_alternative<sequence_type>(value_)) {
+            return node_kind::sequence;
+        }
+        return node_kind::null;
+    }
+
+public:
     // Visitor support
     template<typename Visitor>
     [[nodiscard]] decltype(auto) visit(Visitor&& v) {
         return visit_impl(std::forward<Visitor>(v), std::integral_constant<bool, std::is_const_v<Visitor>>{});
     }
 
-    template<typename Visitor>
-    [[nodiscard]] decltype(auto) visit(Visitor&& v) const {
-        switch (kind_) {
-            case kind::null:
-                return v.visit_null(*this);
-            case kind::element:
-                return v.visit_element(*this);
-            case kind::text:
-                return v.visit_text(*this);
-            case kind::sequence:
-                return v.visit_sequence(*this);
-            case kind::mapping:
-                return v.visit_mapping(*this);
-            case kind::comment:
-                return v.visit_comment(*this);
+
+private:
+    void initialize_for_kind(node_kind k) {
+        switch (k) {
+            case node_kind::undefined:
+                throw std::logic_error("node_kind::undefined is not a valid kind for initialization");
+            case node_kind::null:
+            case node_kind::element:
+            case node_kind::mapping:
+                value_ = std::monostate{};
+                return;
+            case node_kind::text:
+                value_ = text_node_type(allocator_);
+                return;
+            case node_kind::attribute:
+                value_ = attribute_node_type(allocator_);
+                return;
+            case node_kind::sequence:
+                value_ = sequence_type(allocator_);
+                return;
+            case node_kind::comment:
+                value_ = comment_node_type(allocator_);
+                return;
         }
         throw std::logic_error("Invalid node kind");
     }
 
-private:
-    void initialize_for_kind(kind k) {
-        switch (k) {
-            case kind::null:
-                value_ = std::monostate{};
-                break;
-            case kind::sequence:
-                value_ = sequence_type(allocator_);
-                break;
-            case kind::text:
-                value_ = text_node_type(allocator_);
-                break;
-            case kind::comment:
-                value_ = comment_node_type(allocator_);
-                break;
-            case kind::element:
-            case kind::mapping:
-            default:
-                value_ = std::monostate{};
-                break;
-        }
-        kind_ = k;
-    }
-
     template<typename Visitor>
-    [[nodiscard]] decltype(auto) visit_impl(Visitor&& v, std::false_type) {
-        switch (kind_) {
-            case kind::null:
+    [[nodiscard]] decltype(auto) visit_impl(Visitor&& v) {
+        // TODO: Put these in a map.
+        switch (get_node_kind(v)) {
+            case node_kind::null:
                 return v.visit_null(*this);
-            case kind::element:
+            case node_kind::element:
                 return v.visit_element(*this);
-            case kind::text:
+            case node_kind::attribute:
                 return v.visit_text(*this);
-            case kind::sequence:
+            case node_kind::text:
+                return v.visit_text(*this);
+            case node_kind::sequence:
                 return v.visit_sequence(*this);
-            case kind::mapping:
+            case node_kind::mapping:
                 return v.visit_mapping(*this);
-            case kind::comment:
+            case node_kind::comment:
                 return v.visit_comment(*this);
         }
         throw std::logic_error("Invalid node kind");
@@ -493,7 +623,6 @@ private:
     attributes_map attributes_;
     members_map members_;
     allocator_type allocator_;
-    kind kind_{kind::null};
 };
 
 // Type aliases
@@ -501,388 +630,3 @@ using object = basic_object<char, std::allocator<char>>;
 using wobject = basic_object<wchar_t, std::allocator<wchar_t>>;
 
 };
-namespace detail {
-
-template<typename CharT, typename Traits, typename Alloc>
-[[nodiscard]] bool matches_path_name(
-    const std::basic_string<CharT, Traits, Alloc>& value,
-    std::string_view path_name) {
-    if constexpr (std::is_same_v<CharT, char>) {
-        return value == path_name;
-    } else {
-        if (value.size() != path_name.size()) {
-            return false;
-        }
-        for (std::size_t i = 0; i < path_name.size(); ++i) {
-            if (value[i] != static_cast<CharT>(static_cast<unsigned char>(path_name[i]))) {
-                return false;
-            }
-        }
-        return true;
-    }
-}
-
-template<typename Object, typename Pointer>
-using pointer_vector = std::vector<Pointer, typename std::allocator_traits<typename Object::allocator_type>::template rebind_alloc<Pointer>>;
-
-template<std::size_t MaxNameLength>
-struct path_segment {
-    std::array<char, MaxNameLength + 1> name{};
-    std::size_t name_length{};
-    std::size_t index{};
-    bool has_index{};
-    bool is_attribute{};
-
-    [[nodiscard]] constexpr std::string_view name_view() const noexcept {
-        return std::string_view(name.data(), name_length);
-    }
-};
-
-consteval void fail_parse(std::string_view message) {
-    throw std::logic_error(std::string(message));
-}
-
-[[nodiscard]] consteval std::size_t count_segments(std::string_view path) {
-    std::size_t count = 0;
-    std::size_t offset = 0;
-    while (offset < path.size()) {
-        while (offset < path.size() && path[offset] == '/') {
-            ++offset;
-        }
-        if (offset >= path.size()) {
-            break;
-        }
-        ++count;
-        while (offset < path.size() && path[offset] != '/') {
-            ++offset;
-        }
-    }
-    return count;
-}
-
-[[nodiscard]] consteval std::size_t max_segment_name_length(std::string_view path) {
-    std::size_t max_length = 0;
-    std::size_t offset = 0;
-    while (offset < path.size()) {
-        while (offset < path.size() && path[offset] == '/') {
-            ++offset;
-        }
-        if (offset >= path.size()) {
-            break;
-        }
-
-        if (path[offset] == '@') {
-            ++offset;
-        }
-
-        std::size_t name_length = 0;
-        while (offset < path.size() && path[offset] != '/' && path[offset] != '[') {
-            ++name_length;
-            ++offset;
-        }
-
-        max_length = std::max(max_length, name_length);
-        while (offset < path.size() && path[offset] != '/') {
-            ++offset;
-        }
-    }
-    return max_length;
-}
-
-[[nodiscard]] consteval std::size_t parse_index(std::string_view path, std::size_t& offset) {
-    if (offset >= path.size() || path[offset] != '[') {
-        fail_parse("expected '[' in path segment index");
-    }
-
-    ++offset;
-    if (offset >= path.size() || path[offset] < '0' || path[offset] > '9') {
-        fail_parse("path segment index must contain digits");
-    }
-
-    std::size_t value = 0;
-    while (offset < path.size() && path[offset] >= '0' && path[offset] <= '9') {
-        value = (value * 10U) + static_cast<std::size_t>(path[offset] - '0');
-        ++offset;
-    }
-
-    if (offset >= path.size() || path[offset] != ']') {
-        fail_parse("expected closing ']' in path segment index");
-    }
-    ++offset;
-
-    if (value == 0) {
-        fail_parse("XPath-style indices are 1-based and must be greater than zero");
-    }
-
-    return value - 1U;
-}
-
-template<std::size_t SegmentCount, std::size_t MaxNameLength>
-[[nodiscard]] consteval auto build_segments(std::string_view path) {
-    std::array<path_segment<MaxNameLength>, SegmentCount> result{};
-    std::size_t segment_index = 0;
-    std::size_t offset = 0;
-
-    while (offset < path.size()) {
-        while (offset < path.size() && path[offset] == '/') {
-            ++offset;
-        }
-        if (offset >= path.size()) {
-            break;
-        }
-
-        auto& segment = result[segment_index++];
-        if (path[offset] == '@') {
-            segment.is_attribute = true;
-            ++offset;
-        }
-
-        while (offset < path.size() && path[offset] != '/' && path[offset] != '[') {
-            if (segment.name_length >= MaxNameLength) {
-                fail_parse("path segment exceeds supported compile-time name length");
-            }
-            segment.name[segment.name_length++] = path[offset++];
-        }
-
-        if (offset < path.size() && path[offset] == '[') {
-            segment.index = parse_index(path, offset);
-            segment.has_index = true;
-        }
-
-        if (segment.is_attribute && segment.has_index) {
-            fail_parse("attribute segments cannot be indexed");
-        }
-
-        if (offset < path.size() && path[offset] != '/') {
-            fail_parse("unsupported path syntax");
-        }
-    }
-
-    return result;
-}
-
-template<ndof::fixed_string Path>
-struct parsed_path {
-    static constexpr auto raw = Path.view();
-    static constexpr std::size_t segment_count = count_segments(raw);
-    static constexpr std::size_t max_name_length = max_segment_name_length(raw);
-    static constexpr auto segments = build_segments<segment_count, max_name_length>(raw);
-};
-
-template<typename Result>
-void append_if_present(Result& result, const typename Result::value_type candidate) {
-    if (candidate != nullptr) {
-        result.push_back(candidate);
-    }
-}
-
-template<typename Node>
-[[nodiscard]] bool is_query_metadata(const Node& node) {
-    using object_type = std::remove_const_t<Node>;
-    return node.type() == object_type::kind::comment;
-}
-
-template<typename Node>
-[[nodiscard]] auto find_named_attribute(Node& current, std::string_view name)
-    -> std::conditional_t<std::is_const_v<Node>, const typename std::remove_const_t<Node>::value_type*, typename std::remove_const_t<Node>::value_type*> {
-    for (auto& [attribute_name, value] : current.attributes()) {
-        if (matches_path_name(attribute_name, name)) {
-            return &value;
-        }
-    }
-    return nullptr;
-}
-
-template<typename Node, typename Result>
-void append_named_children(Node& current, std::string_view name, std::optional<std::size_t> index, Result& result) {
-    std::size_t match_index = 0;
-    for (auto& child : current.children()) {
-        if (!matches_path_name(child.name(), name)) {
-            continue;
-        }
-
-        if (!index.has_value()) {
-            result.push_back(&child);
-            continue;
-        }
-
-        if (match_index == *index) {
-            result.push_back(&child);
-            return;
-        }
-        ++match_index;
-    }
-}
-
-template<typename Node, typename Result>
-void append_sequence_items(Node& current, std::optional<std::size_t> index, Result& result) {
-    using object_type = std::remove_const_t<Node>;
-
-    if (current.type() != object_type::kind::sequence) {
-        return;
-    }
-
-    if (index.has_value()) {
-        std::size_t semantic_index = 0;
-        for (auto& item : current.elements()) {
-            if (is_query_metadata(item)) {
-                continue;
-            }
-            if (semantic_index == *index) {
-                result.push_back(&item);
-                return;
-            }
-            ++semantic_index;
-        }
-        return;
-    }
-
-    for (auto& item : current.elements()) {
-        if (is_query_metadata(item)) {
-            continue;
-        }
-        result.push_back(&item);
-    }
-}
-
-template<typename Node, typename Result>
-void append_named_member(Node& current, std::string_view name, std::optional<std::size_t> index, Result& result) {
-    using object_type = std::remove_const_t<Node>;
-
-    for (auto& [member_name, value] : current.members()) {
-        if (!matches_path_name(member_name, name)) {
-            continue;
-        }
-
-        if (!index.has_value()) {
-            result.push_back(&value);
-            return;
-        }
-
-        if (value.type() == object_type::kind::sequence) {
-            append_sequence_items(value, index, result);
-            return;
-        }
-
-        if (*index == 0) {
-            result.push_back(&value);
-        }
-        return;
-    }
-}
-
-template<typename Node, std::size_t MaxNameLength, typename Result>
-void append_matches_for_segment(Node& current, const path_segment<MaxNameLength>& segment, Result& result) {
-    using object_type = std::remove_const_t<Node>;
-    const auto name = segment.name_view();
-    const auto index = segment.has_index ? std::optional<std::size_t>(segment.index) : std::nullopt;
-
-    if (segment.is_attribute) {
-        append_if_present(result, find_named_attribute(current, name));
-        return;
-    }
-
-    if (name.empty()) {
-        append_sequence_items(current, index, result);
-        return;
-    }
-
-    if (!index.has_value() && current.type() == object_type::kind::element && matches_path_name(current.name(), name)) {
-        result.push_back(&current);
-    }
-
-    append_named_member(current, name, index, result);
-    append_named_children(current, name, index, result);
-}
-
-template<fixed_string Path, std::size_t SegmentIndex>
-struct path_evaluator {
-    template<typename Pointer, typename CharT, typename Allocator>
-    [[nodiscard]] static auto run(const pointer_vector<ndof::basic_object<CharT, Allocator>, Pointer>& current_nodes, const Allocator& allocator) {
-        using object_type = basic_object<CharT, Allocator>;
-        using result_type = pointer_vector<object_type, Pointer>;
-
-        result_type next_nodes{typename result_type::allocator_type(allocator)};
-        const auto& segment = parsed_path<Path>::segments[SegmentIndex];
-        for (Pointer current : current_nodes) {
-            append_matches_for_segment(*current, segment, next_nodes);
-        }
-
-        if constexpr (SegmentIndex + 1U == parsed_path<Path>::segment_count) {
-            return next_nodes;
-        } else {
-            return path_evaluator<Path, SegmentIndex + 1U>::template run<Pointer, CharT, Allocator>(next_nodes, allocator);
-        }
-    }
-};
-
-} // namespace detail
-
-template<fixed_string Path>
-struct xpath_query {
-    template<typename CharT, typename Allocator>
-    [[nodiscard]] static auto find_all(basic_object<CharT, Allocator>& root) {
-        using object_type = basic_object<CharT, Allocator>;
-        using result_type = detail::pointer_vector<object_type, object_type*>;
-
-        if constexpr (detail::parsed_path<Path>::segment_count == 0) {
-            result_type matches(typename result_type::allocator_type(root.allocator()));
-            matches.push_back(&root);
-            return matches;
-        } else {
-            result_type roots(typename result_type::allocator_type(root.allocator()));
-            roots.push_back(&root);
-            return detail::path_evaluator<Path, 0>::template run<object_type*, CharT, Allocator>(roots, root.allocator());
-        }
-    }
-
-    template<typename CharT, typename Allocator>
-    [[nodiscard]] static auto find_all(const basic_object<CharT, Allocator>& root) {
-        using object_type = basic_object<CharT, Allocator>;
-        using result_type = detail::pointer_vector<object_type, const object_type*>;
-
-        if constexpr (detail::parsed_path<Path>::segment_count == 0) {
-            result_type matches(typename result_type::allocator_type(root.allocator()));
-            matches.push_back(&root);
-            return matches;
-        } else {
-            result_type roots(typename result_type::allocator_type(root.allocator()));
-            roots.push_back(&root);
-            return detail::path_evaluator<Path, 0>::template run<const object_type*, CharT, Allocator>(roots, root.allocator());
-        }
-    }
-
-    template<typename CharT, typename Allocator>
-    [[nodiscard]] static basic_object<CharT, Allocator>* find_first(basic_object<CharT, Allocator>& root) {
-        auto matches = find_all(root);
-        return matches.empty() ? nullptr : matches.front();
-    }
-
-    template<typename CharT, typename Allocator>
-    [[nodiscard]] static const basic_object<CharT, Allocator>* find_first(const basic_object<CharT, Allocator>& root) {
-        auto matches = find_all(root);
-        return matches.empty() ? nullptr : matches.front();
-    }
-};
-
-template<fixed_string Path, typename CharT, typename Allocator>
-[[nodiscard]] auto find_all(basic_object<CharT, Allocator>& root) {
-    return xpath_query<Path>::find_all(root);
-}
-
-template<fixed_string Path, typename CharT, typename Allocator>
-[[nodiscard]] auto find_all(const basic_object<CharT, Allocator>& root) {
-    return xpath_query<Path>::find_all(root);
-}
-
-template<fixed_string Path, typename CharT, typename Allocator>
-[[nodiscard]] basic_object<CharT, Allocator>* find_first(basic_object<CharT, Allocator>& root) {
-    return xpath_query<Path>::find_first(root);
-}
-
-template<fixed_string Path, typename CharT, typename Allocator>
-[[nodiscard]] const basic_object<CharT, Allocator>* find_first(const basic_object<CharT, Allocator>& root) {
-    return xpath_query<Path>::find_first(root);
-}
-
-} // namespace ndof

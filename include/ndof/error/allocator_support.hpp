@@ -37,38 +37,18 @@ concept has_allocator_definitions = requires {
     typename std::allocator_traits<Allocator>::const_void_pointer;
 };
 
-
-template<typename T>
-concept allocator_value_gettable =
-    requires(const T& value) {
-        typename T::allocator_type;
-        { value.get_value() } -> std::same_as<typename T::allocator_type>;
-};
-
-
 template<typename T>
 concept allocator_like =
     ndof::has_allocator_definitions<T> &&
-    allocator_value_gettable<T> &&
-    std::constructible_from<T, const typename T::allocator_type&> &&
-    std::constructible_from<typename T::allocator_type, const T&> &&
     std::destructible<T>;
 
-// TODO: add has a get_value check here somehow.
-
-template<typename Allocator, typename ValueType>
-concept allocator_for = 
-    ndof::allocator_like<Allocator> &&
-    requires {
-        typename ValueType::allocator_type;
-        typename std::allocator_traits<Allocator>::template rebind_alloc<ValueType>;
-    } &&
-    std::same_as<
-        typename ValueType::allocator_type,
-        typename std::allocator_traits<Allocator>::template rebind_alloc<ValueType>> &&
-    std::constructible_from<
-        typename std::allocator_traits<Allocator>::template rebind_alloc<ValueType>,
-        const Allocator&>;
+template<typename T>
+concept allocator_aware =
+    requires(T t) {
+        typename T::allocator_type;
+        {t.get_allocator()} -> std::same_as<typename T::allocator_type>;
+    } && ndof::allocator_like<typename T::allocator_type>;
+ 
 
 template<typename Allocator, typename ExpectedAllocator>
 concept allocator_compatible_with =
