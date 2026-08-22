@@ -52,7 +52,7 @@ struct result_impl<T, true, CharT, Traits> {
 template<typename T,
           typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>>
-using result = typename result_impl<T, get_exceptions_enabled(), CharT, Traits>::type;
+using result_t = typename result_impl<T, get_exceptions_enabled(), CharT, Traits>::type;
 
 template <typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>>
