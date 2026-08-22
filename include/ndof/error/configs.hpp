@@ -94,17 +94,70 @@ using default_char_t = NDOF_DEFAULT_CHAR_TYPE;
 
 using default_char_traits_t = NDOF_DEFAULT_CHAR_TRAITS_TYPE;
 
+// Determine the build mode based on standard compiler switches.
+// - NDEBUG defined typically indicates a release build (assert() is a no-op).
+// - Otherwise, treat it as a debug build.
+#ifndef NDOF_BUILD_MODE
+#if defined(NDEBUG)
+#define NDOF_BUILD_MODE ::ndof::build_mode::release
+#else
+#define NDOF_BUILD_MODE ::ndof::build_mode::debug
+#endif
+#endif
+
+
 using default_string_view = std::basic_string_view<default_char_t, default_char_traits_t>;
 
-[[nodiscard]] consteval ndof::build_mode get_build_mode() noexcept;
+#ifndef NDOF_STR
+#if defined(_WIN32) && (defined(_UNICODE) || defined(UNICODE))
+#define NDOF_STR(s) L##s
+#elif defined(__cpp_char8_t)
+#define NDOF_STR(s) u8##s
+#else
+#define NDOF_STR(s) s
+#endif
+#endif
 
-[[nodiscard]] consteval default_string_view get_build_mode_name() noexcept;
+[[nodiscard]] consteval ndof::build_mode get_build_mode() noexcept {
+    return NDOF_BUILD_MODE;
+}
 
-[[nodiscard]] consteval bool get_rtti_enabled() noexcept;
+[[nodiscard]] consteval default_string_view get_build_mode_name() noexcept {
+    switch (get_build_mode()) {
+        case build_mode::debug:
+            return default_string_view{NDOF_STR("debug")};
+        case build_mode::release:
+            return default_string_view{NDOF_STR("release")};
+        case build_mode::undefined:
+        default:
+            return default_string_view{NDOF_STR("undefined")};
+    }
+}
 
-[[nodiscard]] consteval ndof::type_index_mode get_type_index_mode() noexcept;
+[[nodiscard]] consteval bool get_rtti_enabled() noexcept {
+#if defined(NDOF_RTTI_ENABLED) && (NDOF_RTTI_ENABLED)
+    return true;
+#else
+    return false;
+#endif
+}
 
-[[nodiscard]] consteval default_string_view get_type_index_mode_name() noexcept;
+[[nodiscard]] consteval ndof::type_index_mode get_type_index_mode() noexcept {
+    if (get_rtti_enabled()) {
+        return type_index_mode::rtti_type_index;
+    }
+    return type_index_mode::ndof_type_index;
+}
+
+[[nodiscard]] consteval default_string_view get_type_index_mode_name() noexcept {
+    switch (get_type_index_mode()) {
+        case type_index_mode::rtti_type_index:
+            return default_string_view{NDOF_STR("rtti_type_index")};
+        case type_index_mode::ndof_type_index:
+        default:
+            return default_string_view{NDOF_STR("ndof_type_index")};
+    }
+}
 
 // Determine whether C++ exceptions are enabled based on standard compiler switches.
 #ifndef NDOF_EXCEPTIONS_ENABLED
