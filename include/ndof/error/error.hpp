@@ -180,6 +180,8 @@ struct basic_explicit_inner_exception : basic_inner_exception<CharT, Traits, All
     static_assert(false,"fix this.");
 };
 
+
+
 template <typename ExceptionType, typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>,
           typename Allocator = std::allocator<CharT>>
