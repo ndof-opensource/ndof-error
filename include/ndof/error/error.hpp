@@ -181,48 +181,9 @@ struct basic_explicit_inner_exception : basic_inner_exception<CharT, Traits, All
     static_assert(false,"fix this.");
 };
  
-
-template <typename CharT, typename Traits, allocator_like Allocator>
-[[nodiscard]] result_t<void, CharT, Traits >
-basic_explicit_inner_exception<std::runtime_error, CharT, Traits, Allocator>::to_object(
-    ndof::basic_object<CharT, Traits>& obj)
-    const;
-
-template <typename CharT, typename Traits, allocator_like Allocator>
-[[nodiscard]] result_t<void, CharT, Traits >
-basic_explicit_inner_exception<std::range_error, CharT, Traits, Allocator>::to_object(
-    ndof::basic_object<CharT, Traits>& obj)
-    const;
-
-template <typename CharT, typename Traits, allocator_like Allocator>
-[[nodiscard]] result_t<void, CharT, Traits >
-basic_explicit_inner_exception<std::overflow_error, CharT, Traits, Allocator>::to_object(
-    ndof::basic_object<CharT, Traits>& obj)
-    const;
-
-template <typename CharT, typename Traits, allocator_like Allocator>
-[[nodiscard]] result_t<void, CharT, Traits >
-basic_explicit_inner_exception<std::underflow_error, CharT, Traits, Allocator>::to_object(
-    ndof::basic_object<CharT, Traits>& obj)
-    const;
-
-template <typename CharT, typename Traits, allocator_like Allocator>
-[[nodiscard]] result_t<void, CharT, Traits >
-basic_explicit_inner_exception<std::bad_alloc, CharT, Traits, Allocator>::to_object(
-    ndof::basic_object<CharT, Traits>& obj)
-    const;
-
-template <typename CharT, typename Traits, allocator_like Allocator>
-[[nodiscard]] result_t<void, CharT, Traits >
-basic_explicit_inner_exception<std::bad_cast, CharT, Traits, Allocator>::to_object(
-    ndof::basic_object<CharT, Traits>& obj)
-    const;
-
-template <typename CharT, typename Traits, allocator_like Allocator>
-[[nodiscard]] result_t<void, CharT, Traits >
-basic_explicit_inner_exception<std::bad_typeid, CharT, Traits, Allocator>::to_object(
-    ndof::basic_object<CharT, Traits>& obj)
-    const;
+// TODO: Implement partial specializations for each standard exception.
+//       In implementing them, create an inner class or something.
+//       Partial specialization definitions outside of the declaration don't work apparently.
 
 template <typename ExceptionType, typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>,
