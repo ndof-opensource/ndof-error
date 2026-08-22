@@ -4,6 +4,12 @@
 #ifndef NDOF_ERROR_CONFIGS_HPP
 #define NDOF_ERROR_CONFIGS_HPP
 
+// TODO: Check the character set that was used to compile the library and provide a way to query it at runtime.
+//       We can use this setting as the default character set for the library and provide a way to override it at runtime if necessary.
+//       Probably by defining ndof::object to be ndof::basic_object<ndof::default_char_type> and providing a way to change the default_char_type at runtime.
+//       Same with ndof::exception and ndof::basic_exception<ndof::default_char_type>.
+
+
 
 #include <cstdint>
 #include <string_view>
@@ -12,8 +18,28 @@
 // Example: auto [passed, name] = NDOF_CAPTURE_BOOL_TEST(x > 0);
 #define NDOF_CAPTURE_BOOL_TEST(test_expression) static_cast<bool>(test_expression), #test_expression
 
- 
-#if defined(NDOF_RTTI_ENABLED) && (NDOF_RTTI_ENABLED)
+#ifndef NDOF_RTTI_ENABLED
+//-fno-rtti (GCC/Clang) or /GR- (MSVC)
+#if defined(__cpp_rtti)
+#define NDOF_RTTI_ENABLED 1
+#elif defined(_MSC_VER)
+#if defined(_CPPRTTI)
+#define NDOF_RTTI_ENABLED 1
+#else
+#define NDOF_RTTI_ENABLED 0
+#endif
+#elif defined(__GNUC__) || defined(__clang__)
+#if defined(__GXX_RTTI)
+#define NDOF_RTTI_ENABLED 1
+#else
+#define NDOF_RTTI_ENABLED 0
+#endif
+#else
+#define NDOF_RTTI_ENABLED 0
+#endif
+#endif
+
+#if defined(NDOF_RTTI_ENABLED) 
 #include <typeindex>
 using type_token = std::type_index;
 #else
@@ -36,7 +62,7 @@ enum class type_index_mode : std::uint8_t {
 };
 
 template<typename T>
-[[nodiscard]] type_token type_token_of() noexcept {
+[[nodiscard]] constexpr type_token type_token_of() noexcept {
 #if defined(NDOF_RTTI_ENABLED) && (NDOF_RTTI_ENABLED)
     return std::type_index(typeid(T));
 #else
