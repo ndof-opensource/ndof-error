@@ -192,7 +192,7 @@ using result = T;
 
 #else
 
-// TODO: make sure this is noted at the top of the file.
+// Note: This is called out at the top of the file too.
 #include <expected>
 
 // When exceptions are disabled, error propagation is done via std::expected,
