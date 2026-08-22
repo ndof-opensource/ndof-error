@@ -175,6 +175,9 @@ struct basic_explicit_inner_exception : basic_inner_exception<CharT, Traits, All
                                             const std::source_location& source_location_value,
                                             const OtherAllocator& allocator = OtherAllocator());
 
+          
+    // TODO: figure out how to pass an object containing a foreign allocator.  
+    //       maybe use a requires clause?
     [[nodiscard]] result_t<void, CharT, Traits>
     to_object(ndof::basic_object<CharT, Traits>& obj) const override;
 };
