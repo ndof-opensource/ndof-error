@@ -84,7 +84,7 @@ using result_t = typename result_impl<T, get_exceptions_enabled(), CharT, Traits
 
 using void_result_t = result_t<void, ndof::default_char_t, ndof::default_char_traits_t<ndof::default_char_t>>;
 
-} // namespace ndof::error
+ 
 
 template <typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>>
@@ -179,7 +179,7 @@ struct basic_explicit_inner_exception : basic_inner_exception<CharT, Traits, All
     template <allocator_compatible_with<Allocator> OtherAllocator>
     explicit basic_explicit_inner_exception(const std::exception_ptr& captured_exception,
                                             const std::source_location& source_location_value,
-                                            const OtherAllocator& allocator = OtherAllocator())
+                                            const OtherAllocator& allocator = OtherAllocator());
 
     // Fix: 
     static_assert(false,"fix this.");
