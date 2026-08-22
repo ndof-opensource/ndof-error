@@ -85,14 +85,15 @@ template<typename T>
 #endif
 #endif
 
-
 using default_char_t = NDOF_DEFAULT_CHAR_TYPE;
 
-#ifndef NDOF_DEFAULT_CHAR_TRAITS_TYPE
-#define NDOF_DEFAULT_CHAR_TRAITS_TYPE std::char_traits<default_char_t>
-#endif
 
-using default_char_traits_t = NDOF_DEFAULT_CHAR_TRAITS_TYPE;
+#ifndef NDOF_DEFAULT_CHAR_TRAITS_TYPE
+#define NDOF_DEFAULT_CHAR_TRAITS_TYPE std::char_traits 
+#endif 
+
+template<typename CharT>
+using default_char_traits_t = NDOF_DEFAULT_CHAR_TRAITS_TYPE<CharT>;
 
 // Determine the build mode based on standard compiler switches.
 // - NDEBUG defined typically indicates a release build (assert() is a no-op).
@@ -106,8 +107,10 @@ using default_char_traits_t = NDOF_DEFAULT_CHAR_TRAITS_TYPE;
 #endif
 
 
-using default_string_view = std::basic_string_view<default_char_t, default_char_traits_t>;
+using default_string_view = std::basic_string_view<ndof::default_char_t, default_char_traits_t<default_char_t>>;
 
+// Note: This is used to prepend 'L' for unicode or wchar string literals on Windows, and 'u8' for UTF-8 string literals on compilers that support char8_t. 
+//       Otherwise, it defaults to a regular string literal.
 #ifndef NDOF_STR
 #if defined(_WIN32) && (defined(_UNICODE) || defined(UNICODE))
 #define NDOF_STR(s) L##s
@@ -194,12 +197,13 @@ using result = T;
 
 // When exceptions are disabled, error propagation is done via std::expected,
 // carrying either the value T or an ndof::exception on failure.
-template<typename T>
+template<typename T, 
+          typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>>
 using result = std::expected<T, ndof::basic_exception>;
 
 #endif
 
 
-}  
-
+} // namespace ndof
 #endif // NDOF_ERROR_CONFIGS_HPP
