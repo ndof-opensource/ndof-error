@@ -154,7 +154,8 @@ struct basic_inner_exception : basic_exception<CharT, Traits> {
     Allocator allocator_;
 };
 
-template <typename ExceptionType, typename CharT = ndof::default_char_t,
+template <typename ExceptionType, 
+          typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>,
           ndof::allocator_like Allocator = std::allocator<CharT>>
 struct basic_explicit_inner_exception : basic_inner_exception<CharT, Traits, Allocator> {
@@ -176,11 +177,52 @@ struct basic_explicit_inner_exception : basic_inner_exception<CharT, Traits, All
                                             const OtherAllocator& allocator = OtherAllocator());
 
     [[nodiscard]] result_t<void, CharT, Traits>
-    to_object(ndof::basic_object<CharT, Traits>& obj) const override;
+    to_object(ndof::basic_object<CharT, Traits>& obj) const;
     static_assert(false,"fix this.");
 };
+ 
 
+template <typename CharT, typename Traits, allocator_like Allocator>
+[[nodiscard]] result_t<void, CharT, Traits >
+basic_explicit_inner_exception<std::runtime_error, CharT, Traits, Allocator>::to_object(
+    ndof::basic_object<CharT, Traits>& obj)
+    const;
 
+template <typename CharT, typename Traits, allocator_like Allocator>
+[[nodiscard]] result_t<void, CharT, Traits >
+basic_explicit_inner_exception<std::range_error, CharT, Traits, Allocator>::to_object(
+    ndof::basic_object<CharT, Traits>& obj)
+    const;
+
+template <typename CharT, typename Traits, allocator_like Allocator>
+[[nodiscard]] result_t<void, CharT, Traits >
+basic_explicit_inner_exception<std::overflow_error, CharT, Traits, Allocator>::to_object(
+    ndof::basic_object<CharT, Traits>& obj)
+    const;
+
+template <typename CharT, typename Traits, allocator_like Allocator>
+[[nodiscard]] result_t<void, CharT, Traits >
+basic_explicit_inner_exception<std::underflow_error, CharT, Traits, Allocator>::to_object(
+    ndof::basic_object<CharT, Traits>& obj)
+    const;
+
+template <typename CharT, typename Traits, allocator_like Allocator>
+[[nodiscard]] result_t<void, CharT, Traits >
+basic_explicit_inner_exception<std::bad_alloc, CharT, Traits, Allocator>::to_object(
+    ndof::basic_object<CharT, Traits>& obj)
+    const;
+
+template <typename CharT, typename Traits, allocator_like Allocator>
+[[nodiscard]] result_t<void, CharT, Traits >
+basic_explicit_inner_exception<std::bad_cast, CharT, Traits, Allocator>::to_object(
+    ndof::basic_object<CharT, Traits>& obj)
+    const;
+
+template <typename CharT, typename Traits, allocator_like Allocator>
+[[nodiscard]] result_t<void, CharT, Traits >
+basic_explicit_inner_exception<std::bad_typeid, CharT, Traits, Allocator>::to_object(
+    ndof::basic_object<CharT, Traits>& obj)
+    const;
 
 template <typename ExceptionType, typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>,
