@@ -77,7 +77,7 @@ struct basic_exception : std::exception {
     // TODO: Implement.
     void virtual rethrow() const = 0;
 
-    virtual std::expected<void, std::exception> to_object_impl(basic_object<CharT, Traits>& obj) = 0;
+    virtual result_t<void, CharT, Traits> to_object_impl(basic_object<CharT, Traits>& obj) = 0;
 
   protected:
     basic_exception(const basic_exception&) = delete;
@@ -86,7 +86,7 @@ struct basic_exception : std::exception {
     std::source_location location_;
     // TODO: Implement.
     template <ndof::allocator_like OtherAllocator>
-    [[nodiscard]] std::expected<void, std::exception>
+    [[nodiscard]] result_t<void, CharT, Traits>
     to_object(basic_object<CharT, Traits, OtherAllocator>& obj) const noexcept;
 };
 
@@ -119,7 +119,7 @@ struct basic_inner_exception : basic_exception<CharT, Traits> {
 
     void rethrow() const override;
 
-    std::expected<void, std::exception> to_object_impl(basic_object<CharT, Traits>& obj) override;
+    result_t<void, CharT, Traits> to_object_impl(basic_object<CharT, Traits>& obj) override;
 
   private:
     std::exception_ptr captured_exception_;
@@ -147,7 +147,7 @@ struct basic_explicit_inner_exception : basic_inner_exception<CharT, Traits, All
                                             const std::source_location& source_location_value,
                                             const OtherAllocator& allocator = OtherAllocator());
 
-    [[nodiscard]] std::expected<void, std::exception>
+    [[nodiscard]] result_t<void, CharT, Traits>
     to_object(ndof::basic_object<CharT, Traits>& obj) const override;
 };
 
