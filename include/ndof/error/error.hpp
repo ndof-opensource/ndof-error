@@ -16,6 +16,44 @@ using check_mode = ndof::build_mode;
 //       Should be IStreamableToObject.
 //       Should be IStreamableFromObject.
 
+// Note: This is called out at the top of the file too.
+#include <expected>
+
+ 
+
+// Forward declaration, needed by result_impl below.
+template <typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>>
+struct basic_exception;
+
+// Primary template, specialized below on whether exceptions are enabled, so
+// that `result` can be defined as a single alias template regardless of the
+// exceptions-enabled setting.
+template <typename T,
+          bool ExceptionsEnabled,
+          typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>>
+struct result_impl;
+
+// When exceptions are disabled, error propagation is done via std::expected,
+// carrying either the value T or an ndof::exception on failure.
+template <typename T, typename CharT, typename Traits>
+struct result_impl<T, false, CharT, Traits> {
+  using type = std::expected<T, ndof::error::basic_exception<CharT, Traits>>;
+};
+
+// When exceptions are enabled, error propagation is done via throwing, so the
+// return type is simply T.
+template <typename T, typename CharT, typename Traits>
+struct result_impl<T, true, CharT, Traits> {
+  using type = T;
+};
+
+template<typename T,
+          typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>>
+using result = typename result_impl<T, get_exceptions_enabled(), CharT, Traits>::type;
+
 template <typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>>
 struct basic_exception : std::exception {

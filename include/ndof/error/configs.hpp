@@ -180,29 +180,9 @@ using default_string_view = std::basic_string_view<ndof::default_char_t, default
 #define NDOF_EXCEPTIONS_ENABLED 0
 #endif
 #endif
+ 
 
-class basic_exception;
 
-#if defined(NDOF_EXCEPTIONS_ENABLED) && (NDOF_EXCEPTIONS_ENABLED)
-
-// When exceptions are enabled, error propagation is done via throwing, so the
-// return type is simply T.
-template<typename T>
-using result = T;
-
-#else
-
-// Note: This is called out at the top of the file too.
-#include <expected>
-
-// When exceptions are disabled, error propagation is done via std::expected,
-// carrying either the value T or an ndof::exception on failure.
-template<typename T, 
-          typename CharT = ndof::default_char_t,
-          typename Traits = ndof::default_char_traits_t<CharT>>
-using result = std::expected<T, ndof::basic_exception>;
-
-#endif
 
 
 } // namespace ndof
