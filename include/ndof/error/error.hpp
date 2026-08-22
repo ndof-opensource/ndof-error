@@ -175,9 +175,6 @@ struct basic_explicit_inner_exception : basic_inner_exception<CharT, Traits, All
                                             const std::source_location& source_location_value,
                                             const OtherAllocator& allocator = OtherAllocator());
 
-          
-  
-
     [[nodiscard]] result_t<void, CharT, Traits>
     to_object(ndof::basic_object<CharT, Traits>& obj) const override;
     static_assert(false,"fix this.");
