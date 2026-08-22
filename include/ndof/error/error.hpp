@@ -147,6 +147,7 @@ struct basic_inner_exception : basic_exception<CharT, Traits> {
 
     void rethrow() const override;
 
+    // TODO: figure out how to specialize for standard exceptions.
     result_t<void, CharT, Traits> to_object_impl(basic_object<CharT, Traits>& obj) override;
 
   private:
@@ -180,7 +181,7 @@ struct basic_explicit_inner_exception : basic_inner_exception<CharT, Traits, All
     to_object(ndof::basic_object<CharT, Traits>& obj) const;
     static_assert(false,"fix this.");
 };
- 
+
 // TODO: Implement partial specializations for each standard exception.
 //       In implementing them, create an inner class or something.
 //       Partial specialization definitions outside of the declaration don't work apparently.
