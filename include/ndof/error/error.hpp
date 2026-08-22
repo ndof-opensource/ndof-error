@@ -3,6 +3,7 @@
 #include "ndof/error/object.hpp"
 #include <source_location>
 
+
 namespace ndof::error {
 
 using check_mode = ndof::build_mode;
@@ -128,25 +129,25 @@ struct basic_condition_check_exception
     //       a specific string type.
     [[nodiscard]] const allocated_string& expression() const noexcept;
     [[nodiscard]] const allocated_string& message() const noexcept;
-    [[nodiscard]] ndof::check_mode check_mode() const noexcept;
+    [[nodiscard]] ndof::error::check_mode check_mode() const noexcept;
     [[nodiscard]] const char* what() const noexcept override;
 
   protected:
-    template <ndof::allocator_for<CharT> OtherAllocator>
+    template <ndof::allocator_like OtherAllocator>
     basic_condition_check_exception(
         const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& expression_value,
         const std::source_location& location_value,
         const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& message_value,
-        ndof::check_mode check_mode_value, const Allocator& allocator = Allocator());
+        ndof::error::check_mode check_mode_value, const Allocator& allocator = Allocator());
 
   private:
     allocated_string expression_;
     allocated_string message_;
-    ndof::check_mode check_mode_;
+    ndof::error::check_mode check_mode_;
 };
 
 template <typename ExceptionType, typename CharT = char,
-          ndof::allocator_for<CharT> Allocator = std::allocator<CharT>>
+          ndof::allocator_like  Allocator = std::allocator<CharT>>
 struct basic_precondition_check_exception
     : basic_condition_check_exception<ExceptionType, CharT, Allocator> {
     basic_precondition_check_exception() = default;
@@ -157,16 +158,16 @@ struct basic_precondition_check_exception
     basic_precondition_check_exception& operator=(basic_precondition_check_exception&&) = default;
     ~basic_precondition_check_exception() = default;
 
-    template <ndof::allocator_for<CharT> OtherAllocator>
+    template <allocator_like OtherAllocator>
     basic_precondition_check_exception(
         const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& expression_value,
         const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& message_value,
-        const std::source_location& location_value, ndof::check_mode check_mode_value,
+        const std::source_location& location_value, ndof::error::check_mode check_mode_value,
         const Allocator& allocator = Allocator());
 };
 
 template <typename ExceptionType, typename CharT = char,
-          ndof::allocator_for<CharT> Allocator = std::allocator<CharT>>
+          ndof::allocator_like Allocator = std::allocator<CharT>>
 struct basic_postcondition_check_exception
     : basic_condition_check_exception<ExceptionType, CharT, Allocator> {
     basic_postcondition_check_exception() = default;
@@ -177,16 +178,16 @@ struct basic_postcondition_check_exception
     basic_postcondition_check_exception& operator=(basic_postcondition_check_exception&&) = default;
     ~basic_postcondition_check_exception() = default;
 
-    template <ndof::allocator_for<CharT> OtherAllocator>
+    template <ndof::allocator_like OtherAllocator>
     basic_postcondition_check_exception(
         const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& expression_value,
         const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& message_value,
-        const std::source_location& location_value, ndof::check_mode check_mode_value,
+        const std::source_location& location_value, ndof::error::check_mode check_mode_value,
         const Allocator& allocator = Allocator());
 };
 
 template <typename ExceptionType, typename CharT = char,
-          ndof::allocator_for<CharT> Allocator = std::allocator<CharT>>
+          ndof::allocator_like Allocator = std::allocator<CharT>>
 struct basic_invariant_condition_check_exception
     : basic_condition_check_exception<ExceptionType, CharT, Allocator> {
     basic_invariant_condition_check_exception() = default;
@@ -200,17 +201,18 @@ struct basic_invariant_condition_check_exception
     operator=(basic_invariant_condition_check_exception&&) = default;
     ~basic_invariant_condition_check_exception() = default;
 
-    template <ndof::allocator_for<CharT> OtherAllocator>
+    template <ndof::allocator_like OtherAllocator>
     basic_invariant_condition_check_exception(
         const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& expression_value,
         const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& message_value,
-        const std::source_location& location_value, ndof::check_mode check_mode_value,
+        const std::source_location& location_value, ndof::error::check_mode check_mode_value,
         const Allocator& allocator = Allocator());
 };
 
 // TODO: Revisit.
 template <typename ExceptionType, typename CharT = char,
-          ndof::allocator_for<CharT> Allocator = std::allocator<CharT>>
+          ndof::allocator_like Allocator = std::allocator<CharT>>
+          requires(get_exceptions_enabled())
 void throw_exception(ExceptionType&& exception,
                      std::source_location source_location_value = std::source_location::current(),
                      const Allocator& allocator = Allocator()) {

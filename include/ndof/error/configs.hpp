@@ -142,6 +142,14 @@ using default_string_view = std::basic_string_view<default_char_t, default_char_
 #endif
 }
 
+[[nodiscard]] consteval bool get_exceptions_enabled() noexcept {
+#if defined(NDOF_EXCEPTIONS_ENABLED) && (NDOF_EXCEPTIONS_ENABLED)
+    return true;
+#else
+    return false;
+#endif
+}
+
 [[nodiscard]] consteval ndof::type_index_mode get_type_index_mode() noexcept {
     if (get_rtti_enabled()) {
         return type_index_mode::rtti_type_index;
