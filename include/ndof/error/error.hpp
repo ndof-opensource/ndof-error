@@ -231,23 +231,38 @@ void throw_exception(ExceptionType&& exception,
 
 template <typename ExceptionType, typename CharT = char,
           ndof::allocator_like Allocator = std::allocator<CharT>>
-          requires(get_exceptions_enabled())
-auto make_ndof_exception(ExceptionType& exception,
-                     std::source_location source_location_value = std::source_location::current(),
-                     const Allocator& allocator = Allocator()) {
+          requires(get_exceptions_enabled() &&
+                   std::derived_from<std::remove_cvref_t<ExceptionType>,
+                                     ndof::error::basic_exception<CharT>>)
+[[nodiscard]] auto make_ndof_exception(
+    ExceptionType& exception,
+    std::source_location source_location_value = std::source_location::current(),
+    const Allocator& allocator = Allocator()) {
 
     using captured_exception_type = std::remove_cvref_t<ExceptionType>;
-    if constexpr (std::derived_from<captured_exception_type, ndof::error::basic_exception<CharT>>) {
-        return basic_explicit_inner_exception<captured_exception_type, CharT, Allocator>(
-            std::forward<ExceptionType>(exception),
-            source_location_value,
-            allocator);
-    } else {
-        throw basic_explicit_inner_exception<captured_exception_type, CharT, Allocator>(
-            std::forward<ExceptionType>(exception),
-            allocator);
+    return basic_explicit_inner_exception<captured_exception_type, CharT, Allocator>(
+        std::forward<ExceptionType>(exception),
+        source_location_value,
+        allocator);
+}
+
+template <typename ExceptionType, typename CharT = char,
+          ndof::allocator_like Allocator = std::allocator<CharT>>
+          requires(get_exceptions_enabled() &&
+                   !std::derived_from<std::remove_cvref_t<ExceptionType>,
+                                      ndof::error::basic_exception<CharT>>)
+void make_ndof_exception(
+    ExceptionType& exception,
+    std::source_location source_location_value = std::source_location::current(),
+    const Allocator& allocator = Allocator()) {
+
+    using captured_exception_type = std::remove_cvref_t<ExceptionType>;
+    throw basic_explicit_inner_exception<captured_exception_type, CharT, Allocator>(
+        std::forward<ExceptionType>(exception),
+        source_location_value,
+        allocator);
 }
 
 } // namespace ndof::error
 
-} // namespace ndof::error
+ 
