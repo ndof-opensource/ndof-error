@@ -84,17 +84,14 @@ using result_t = typename result_impl<T, get_exceptions_enabled(), CharT, Traits
 
 using void_result_t = result_t<void, ndof::default_char_t, ndof::default_char_traits_t<ndof::default_char_t>>;
 
- 
-
 template <typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>>
 struct basic_exception : std::exception {
   public:
-    basic_exception() = delete;
 
     basic_exception(const std::source_location& source_location_value);
-
-    basic_exception(basic_exception&&) = delete;
+    basic_exception() = delete;
+    
     // TODO: Revisit these.
     basic_exception& operator=(const basic_exception&) = delete;
     basic_exception& operator=(basic_exception&&) = delete;
@@ -112,7 +109,8 @@ struct basic_exception : std::exception {
     virtual result_t<void, CharT, Traits> to_object_impl(basic_object<CharT, Traits>& obj) = 0;
 
   protected:
-    basic_exception(const basic_exception&) = delete;
+    basic_exception(const basic_exception&) = default;
+    basic_exception(basic_exception&&) = default;
 
   private:
     std::source_location location_;
