@@ -194,7 +194,8 @@ struct basic_explicit_inner_exception : basic_inner_exception<CharT, Traits, All
 //       In implementing them, create an inner class or something.
 //       Partial specialization definitions outside of the declaration don't work apparently.
 
-template <typename ExceptionType, typename CharT = ndof::default_char_t,
+template <typename ExceptionType, 
+          typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>,
           typename Allocator = std::allocator<CharT>>
 struct basic_condition_check_exception
@@ -230,7 +231,8 @@ struct basic_condition_check_exception
     ndof::error::check_mode check_mode_;
 };
 
-template <typename ExceptionType, typename CharT = ndof::default_char_t,
+template <typename ExceptionType, 
+          typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>,
           ndof::allocator_like Allocator = std::allocator<CharT>>
 struct basic_precondition_check_exception
@@ -243,7 +245,7 @@ struct basic_precondition_check_exception
     basic_precondition_check_exception& operator=(basic_precondition_check_exception&&) = default;
     ~basic_precondition_check_exception() = default;
 
-    template <allocator_like OtherAllocator>
+    template <ndof::allocator_like OtherAllocator>
     basic_precondition_check_exception(
         const std::basic_string<CharT, Traits, OtherAllocator>& expression_value,
         const std::basic_string<CharT, Traits, OtherAllocator>& message_value,
@@ -251,7 +253,8 @@ struct basic_precondition_check_exception
         const Allocator& allocator = Allocator());
 };
 
-template <typename ExceptionType, typename CharT = ndof::default_char_t,
+template <typename ExceptionType, 
+          typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>,
           ndof::allocator_like Allocator = std::allocator<CharT>>
 struct basic_postcondition_check_exception
@@ -272,7 +275,8 @@ struct basic_postcondition_check_exception
         const Allocator& allocator = Allocator());
 };
 
-template <typename ExceptionType, typename CharT = ndof::default_char_t,
+template <typename ExceptionType, 
+          typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>,
           ndof::allocator_like Allocator = std::allocator<CharT>>
 struct basic_invariant_condition_check_exception
@@ -297,7 +301,8 @@ struct basic_invariant_condition_check_exception
 };
 
 // TODO: Discuss.  The behavior will change if the exception type passed in is not_allocator_aware.
-template <typename ExceptionType, typename CharT = ndof::default_char_t,
+template <typename ExceptionType, 
+          typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>,
           ndof::allocator_like Allocator = std::allocator<CharT>>
     requires(
@@ -314,7 +319,8 @@ generate_or_throw_ndof_exception(ExceptionType& exception,
         std::forward<ExceptionType>(exception), source_location_value, allocator);
 }
 
-template <typename ExceptionType, typename CharT = ndof::default_char_t,
+template <typename ExceptionType, 
+          typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>>
     requires(
         get_exceptions_enabled() &&
@@ -332,7 +338,8 @@ generate_or_throw_ndof_exception(ExceptionType& exception,
         std::forward<ExceptionType>(exception), source_location_value, allocator);
 }
 
-template <typename ExceptionType, typename CharT = ndof::default_char_t,
+template <typename ExceptionType, 
+          typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>,
           ndof::allocator_like Allocator = std::allocator<CharT>>
     requires(
@@ -349,7 +356,8 @@ void generate_or_throw_ndof_exception(
         std::forward<ExceptionType>(exception), source_location_value, allocator);
 }
 
-template <typename ExceptionType, typename CharT = ndof::default_char_t,
+template <typename ExceptionType, 
+          typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>>
     requires(
         get_exceptions_enabled() &&
