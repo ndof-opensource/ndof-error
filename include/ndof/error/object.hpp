@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "ndof/error/allocator_support.hpp"
+#include "ndof/error/configs.hpp"
  
 // TODO: Move this to the core library.
 // TODO: Make sure the method classifier stuff specializes on noexcept.
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <optional>
 #include <source_location>
@@ -25,7 +25,7 @@
 namespace ndof {
 
 // Forward declarations
-template<typename CharT, allocator_like Allocator>
+template<typename CharT, typename CharTraits, allocator_like Allocator>
 class basic_object;
 
 // Node type enumeration
@@ -56,12 +56,12 @@ constexpr auto expected_name(node_kind kind) {
 }
 
 // Node type traits
-template<typename CharT, allocator_like Allocator>
+template<typename CharT, typename CharTraits, allocator_like Allocator>
 struct node_type_traits {
     using char_type = CharT;
     using allocator_type = Allocator;
-    using string_type = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
-    using object_type = basic_object<CharT, Allocator>;
+    using string_type = std::basic_string<CharT, CharTraits, Allocator>;
+    using object_type = basic_object<CharT, CharTraits, Allocator>;
     using sequence_type = std::vector<object_type, Allocator>;
     using attribute_type = std::pair<string_type, string_type>;
     using attributes_map = std::vector<
@@ -91,12 +91,12 @@ struct mismatch_state {
 };
 
 // Text node - represents scalar values (JSON string, number, boolean, null)
-template<typename CharT, allocator_like Allocator>
+template<typename CharT, typename CharTraits, allocator_like Allocator>
 class text_node {
 public:
     using char_type = CharT;
     using allocator_type = Allocator;
-    using string_type = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
+    using string_type = std::basic_string<CharT, CharTraits, Allocator>;
 
     text_node(const allocator_type& alloc = allocator_type())
         : value_(alloc) {}
@@ -104,7 +104,7 @@ public:
     template<typename OtherAllocator>
         requires allocator_compatible_with<OtherAllocator, allocator_type>
     text_node(
-        const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& val,
+        const std::basic_string<CharT, CharTraits, OtherAllocator>& val,
         const OtherAllocator& alloc = OtherAllocator())
         : value_(val.begin(), val.end(), allocator_type(alloc)) {}
 
@@ -146,12 +146,12 @@ private:
 };
 
 // Attribute node - represents key-value metadata
-template<typename CharT, allocator_like Allocator>
+template<typename CharT, typename CharTraits, allocator_like Allocator>
 class attribute_node {
 public:
     using char_type = CharT;
     using allocator_type = Allocator;
-    using string_type = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
+    using string_type = std::basic_string<CharT, CharTraits, Allocator>;
 
 
     attribute_node(const allocator_type& alloc = allocator_type())
@@ -160,8 +160,8 @@ public:
     template<typename OtherAllocator>
         requires allocator_compatible_with<OtherAllocator, allocator_type>
     attribute_node(
-        const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& name,
-        const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& value,
+        const std::basic_string<CharT, CharTraits, OtherAllocator>& name,
+        const std::basic_string<CharT, CharTraits, OtherAllocator>& value,
         const OtherAllocator& alloc = OtherAllocator())
         : name_(name.begin(), name.end(), allocator_type(alloc)),
           value_(value.begin(), value.end(), allocator_type(alloc)) {}
@@ -171,11 +171,11 @@ public:
     template<typename OtherAllocator>
         requires allocator_compatible_with<OtherAllocator, allocator_type>
     attribute_node(
-        std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>&& name,
-        std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>&& value,
+        std::basic_string<CharT, CharTraits, OtherAllocator>&& name,
+        std::basic_string<CharT, CharTraits, OtherAllocator>&& value,
         const OtherAllocator& alloc = OtherAllocator())
-                : name_(std::make_move_iterator(name.begin()), std::make_move_iterator(name.end()), alloc),
-                  value_(std::make_move_iterator(value.begin()), std::make_move_iterator(value.end()), alloc) {
+                : name_(std::make_move_iterator(name.begin()), std::make_move_iterator(name.end()), allocator_type(alloc)),
+                  value_(std::make_move_iterator(value.begin()), std::make_move_iterator(value.end()), allocator_type(alloc)) {
 
         }
 
@@ -208,12 +208,12 @@ private:
 };
 
 // Comment node - represents metadata/comments (XML comments, YAML comments)
-template<typename CharT, typename Allocator>
+template<typename CharT, typename CharTraits, typename Allocator>
 class comment_node {
 public:
     using char_type = CharT;
     using allocator_type = Allocator;
-    using string_type = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
+    using string_type = std::basic_string<CharT, CharTraits, Allocator>;
 
     comment_node(const allocator_type& alloc = allocator_type())
         : content_(alloc) {}
@@ -259,17 +259,17 @@ private:
 };
 
 // Forward declaration of basic_object for variant
-template<typename CharT, allocator_like  Allocator>
+template<typename CharT, typename CharTraits, allocator_like Allocator>
 class basic_object;
 
 // Node variant holding all possible node types
-template<typename CharT, allocator_like  Allocator>
+template<typename CharT, typename CharTraits, allocator_like Allocator>
 using node_variant = std::variant<
     std::monostate,
-    text_node<CharT, Allocator>,
-    attribute_node<CharT, Allocator>,
-    comment_node<CharT, Allocator>,
-    std::vector<basic_object<CharT, Allocator>, Allocator>
+    text_node<CharT, CharTraits, Allocator>,
+    attribute_node<CharT, CharTraits, Allocator>,
+    comment_node<CharT, CharTraits, Allocator>,
+    std::vector<basic_object<CharT, CharTraits, Allocator>, Allocator>
 >;
 
 
@@ -277,17 +277,17 @@ using node_variant = std::variant<
 // TODO: Update the template argument list to accept a CharTraits template parameter for the string type, so that we can support custom character traits.
 //       That should be done throughout the entire library, so that we can support custom character traits for the string type.
 // Main object class - supports XML, JSON, YAML parsing
-template<typename CharT = char, allocator_like Allocator = std::allocator<CharT>>
+template<typename CharT = char, typename CharTraits = default_char_traits_t<CharT>, allocator_like Allocator = std::allocator<CharT>>
 class basic_object {
 public:
     using char_type = CharT;
     using allocator_type = Allocator;
-    using string_type = std::basic_string<CharT, std::char_traits<CharT>, Allocator>;
-    using string_view_type = std::basic_string_view<CharT, std::char_traits<CharT>>;
-    using text_node_type = text_node<CharT, Allocator>;
-    using attribute_node_type = attribute_node<CharT, Allocator>;
-    using comment_node_type = comment_node<CharT, Allocator>;
-    using variant_type = node_variant<CharT, Allocator>;
+    using string_type = std::basic_string<CharT, CharTraits, Allocator>;
+    using string_view_type = std::basic_string_view<CharT, CharTraits>;
+    using text_node_type = text_node<CharT, CharTraits, Allocator>;
+    using attribute_node_type = attribute_node<CharT, CharTraits, Allocator>;
+    using comment_node_type = comment_node<CharT, CharTraits, Allocator>;
+    using variant_type = node_variant<CharT, CharTraits, Allocator>;
     using attribute_type = std::pair<string_type, string_type>;
     using attributes_map = std::vector<
         attribute_type,
@@ -537,7 +537,7 @@ private:
     //       If no exceptions, the return type will be an expected<T, E> type, otherwise it will be T, in this case, void.
 
  
-    node_kind get_node_kind(const node_variant<CharT, Allocator>& value_)  noexcept {
+    node_kind get_node_kind(const node_variant<CharT, CharTraits, Allocator>& value_)  noexcept {
         if (std::holds_alternative<std::monostate>(value_)) {
             if (!members_.empty()) {
                 return node_kind::mapping;

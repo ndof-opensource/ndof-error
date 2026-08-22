@@ -2,6 +2,7 @@
 #include "ndof/error/configs.hpp"
 #include "ndof/error/object.hpp"
 #include <source_location>
+#include <expected>
 
 namespace ndof::error {
 
@@ -17,13 +18,9 @@ using check_mode = ndof::build_mode;
 //       Should be IStreamableFromObject.
 
 // Note: This is called out at the top of the file too.
-#include <expected>
-
- 
 
 // Forward declaration, needed by result_impl below.
-template <typename CharT = ndof::default_char_t,
-          typename Traits = ndof::default_char_traits_t<CharT>>
+template <typename, typename>
 struct basic_exception;
 
 // Primary template, specialized below on whether exceptions are enabled, so
@@ -35,15 +32,46 @@ template <typename T,
           typename Traits = ndof::default_char_traits_t<CharT>>
 struct result_impl;
 
+// std::expected does not support reference types (or rvalue-reference
+// types) as its value_type, so when T is a reference we must wrap it in
+// std::reference_wrapper for the std::expected specialization below.
+// Note: rvalue references (T&&) cannot be stored via std::reference_wrapper
+// either, so wrapping an rvalue reference through result_t is not supported;
+// callers should return by value or use a (const) lvalue reference instead.
+template <typename T>
+struct result_value_type {
+  using type = T;
+};
+
+template <typename T>
+struct result_value_type<T&> {
+  using type = std::reference_wrapper<T>;
+};
+
+// std::reference_wrapper cannot bind to rvalue references (they refer to
+// temporaries), so instead of rejecting T&& outright we store the decayed
+// value type by value: the rvalue is moved into the std::expected/return
+// value, which is the only sound way to propagate it.
+template <typename T>
+struct result_value_type<T&&> {
+  using type = std::decay_t<T>;
+};
+
+template <typename T>
+using result_value_type_t = typename result_value_type<T>::type;
+
 // When exceptions are disabled, error propagation is done via std::expected,
-// carrying either the value T or an ndof::exception on failure.
+// carrying either the value T (or std::reference_wrapper<T> if T is a
+// reference) or an ndof::exception on failure.
 template <typename T, typename CharT, typename Traits>
 struct result_impl<T, false, CharT, Traits> {
-  using type = std::expected<T, ndof::error::basic_exception<CharT, Traits>>;
+  using type = std::expected<result_value_type_t<T>,
+                              ndof::error::basic_exception<CharT, Traits>>;
 };
 
 // When exceptions are enabled, error propagation is done via throwing, so the
-// return type is simply T.
+// return type is simply T (references are passed through unwrapped, since
+// throwing does not go through std::expected).
 template <typename T, typename CharT, typename Traits>
 struct result_impl<T, true, CharT, Traits> {
   using type = T;
@@ -93,8 +121,8 @@ struct basic_exception : std::exception {
 // Type-independent (with respect to the captured exception type and allocator)
 // base for inner-exception carriers. Holds the captured exception and provides
 // the common behavior so that derived templates do not duplicate code.
-template <typename CharT = ndof::error::default_char_type,
-          typename Traits = std::char_traits<CharT>,
+template <typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>,
           ndof::allocator_like Allocator = std::allocator<CharT>>
 struct basic_inner_exception : basic_exception<CharT, Traits> {
   public:
@@ -126,8 +154,8 @@ struct basic_inner_exception : basic_exception<CharT, Traits> {
     Allocator allocator_;
 };
 
-template <typename ExceptionType, typename CharT = ndof::error::default_char_type,
-          typename Traits = std::char_traits<CharT>,
+template <typename ExceptionType, typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>,
           ndof::allocator_like Allocator = std::allocator<CharT>>
 struct basic_explicit_inner_exception : basic_inner_exception<CharT, Traits, Allocator> {
 
@@ -151,8 +179,8 @@ struct basic_explicit_inner_exception : basic_inner_exception<CharT, Traits, All
     to_object(ndof::basic_object<CharT, Traits>& obj) const override;
 };
 
-template <typename ExceptionType, typename CharT = ndof::error::default_char_type,
-          typename Traits = std::char_traits<CharT>,
+template <typename ExceptionType, typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>,
           typename Allocator = std::allocator<CharT>>
 struct basic_condition_check_exception
     : basic_explicit_inner_exception<ExceptionType, CharT, Traits, Allocator> {
@@ -187,8 +215,8 @@ struct basic_condition_check_exception
     ndof::error::check_mode check_mode_;
 };
 
-template <typename ExceptionType, typename CharT = ndof::error::default_char_type,
-          typename Traits = std::char_traits<CharT>,
+template <typename ExceptionType, typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>,
           ndof::allocator_like Allocator = std::allocator<CharT>>
 struct basic_precondition_check_exception
     : basic_condition_check_exception<ExceptionType, CharT, Traits, Allocator> {
@@ -208,8 +236,8 @@ struct basic_precondition_check_exception
         const Allocator& allocator = Allocator());
 };
 
-template <typename ExceptionType, typename CharT = ndof::error::default_char_type,
-          typename Traits = std::char_traits<CharT>,
+template <typename ExceptionType, typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>,
           ndof::allocator_like Allocator = std::allocator<CharT>>
 struct basic_postcondition_check_exception
     : basic_condition_check_exception<ExceptionType, CharT, Traits, Allocator> {
@@ -229,8 +257,8 @@ struct basic_postcondition_check_exception
         const Allocator& allocator = Allocator());
 };
 
-template <typename ExceptionType, typename CharT = ndof::error::default_char_type,
-          typename Traits = std::char_traits<CharT>,
+template <typename ExceptionType, typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>,
           ndof::allocator_like Allocator = std::allocator<CharT>>
 struct basic_invariant_condition_check_exception
     : basic_condition_check_exception<ExceptionType, CharT, Traits, Allocator> {
@@ -254,8 +282,8 @@ struct basic_invariant_condition_check_exception
 };
 
 // TODO: Discuss.  The behavior will change if the exception type passed in is not_allocator_aware.
-template <typename ExceptionType, typename CharT = ndof::error::default_char_type,
-          typename Traits = std::char_traits<CharT>,
+template <typename ExceptionType, typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>,
           ndof::allocator_like Allocator = std::allocator<CharT>>
     requires(
         get_exceptions_enabled() &&
@@ -271,8 +299,8 @@ generate_or_throw_ndof_exception(ExceptionType& exception,
         std::forward<ExceptionType>(exception), source_location_value, allocator);
 }
 
-template <typename ExceptionType, typename CharT = ndof::error::default_char_type,
-          typename Traits = std::char_traits<CharT>>
+template <typename ExceptionType, typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>>
     requires(
         get_exceptions_enabled() &&
         std::derived_from<std::remove_cvref_t<ExceptionType>, ndof::error::basic_exception<CharT, Traits>> &&
@@ -289,8 +317,8 @@ generate_or_throw_ndof_exception(ExceptionType& exception,
         std::forward<ExceptionType>(exception), source_location_value, allocator);
 }
 
-template <typename ExceptionType, typename CharT = ndof::default_char_type,
-          typename Traits = std::char_traits<CharT>,
+template <typename ExceptionType, typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>,
           ndof::allocator_like Allocator = std::allocator<CharT>>
     requires(
         get_exceptions_enabled() &&
@@ -306,8 +334,8 @@ void generate_or_throw_ndof_exception(
         std::forward<ExceptionType>(exception), source_location_value, allocator);
 }
 
-template <typename ExceptionType, typename CharT = ndof::default_char_type,
-          typename Traits = std::char_traits<CharT>>
+template <typename ExceptionType, typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>>
     requires(
         get_exceptions_enabled() &&
         !std::derived_from<std::remove_cvref_t<ExceptionType>, ndof::error::basic_exception<CharT, Traits>> &&
