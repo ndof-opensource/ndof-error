@@ -3,7 +3,6 @@
 #include "ndof/error/object.hpp"
 #include <source_location>
 
-
 namespace ndof::error {
 
 using check_mode = ndof::build_mode;
@@ -51,12 +50,10 @@ template <typename CharT = char> struct basic_exception : std::exception {
     to_object(basic_object<CharT, OtherAllocator>& obj) const noexcept;
 };
 
-
 // Type-independent (with respect to the captured exception type and allocator)
 // base for inner-exception carriers. Holds the captured exception and provides
 // the common behavior so that derived templates do not duplicate code.
-template <typename CharT = char,
-          ndof::allocator_like Allocator = std::allocator<CharT>>
+template <typename CharT = char, ndof::allocator_like Allocator = std::allocator<CharT>>
 struct basic_inner_exception : basic_exception<CharT> {
   public:
     using allocator_type = Allocator;
@@ -86,7 +83,6 @@ struct basic_inner_exception : basic_exception<CharT> {
     std::exception_ptr captured_exception_;
     Allocator allocator_;
 };
-
 
 template <typename ExceptionType, typename CharT = char,
           ndof::allocator_like Allocator = std::allocator<CharT>>
@@ -147,7 +143,7 @@ struct basic_condition_check_exception
 };
 
 template <typename ExceptionType, typename CharT = char,
-          ndof::allocator_like  Allocator = std::allocator<CharT>>
+          ndof::allocator_like Allocator = std::allocator<CharT>>
 struct basic_precondition_check_exception
     : basic_condition_check_exception<ExceptionType, CharT, Allocator> {
     basic_precondition_check_exception() = default;
@@ -209,60 +205,69 @@ struct basic_invariant_condition_check_exception
         const Allocator& allocator = Allocator());
 };
 
-// TODO: Revisit.
+// TODO: Discuss.  The behavior will change if the exception type passed in is not_allocator_aware.
 template <typename ExceptionType, typename CharT = char,
           ndof::allocator_like Allocator = std::allocator<CharT>>
-          requires(get_exceptions_enabled())
-void throw_exception(ExceptionType&& exception,
-                     std::source_location source_location_value = std::source_location::current(),
-                     const Allocator& allocator = Allocator()) {
-
-    // using captured_exception_type = std::remove_cvref_t<ExceptionType>;
-    // if constexpr (detail::ndof_exception_derived<captured_exception_type>) {
-    //     throw basic_explicit_inner_exception<captured_exception_type, CharT, Allocator>(
-    //         std::forward<ExceptionType>(exception),
-    //         source_location_value,
-    //         allocator);
-    // } else {
-    //     throw basic_explicit_inner_exception<captured_exception_type, CharT, Allocator>(
-    //         std::forward<ExceptionType>(exception),
-    //         allocator);
-}
-
-template <typename ExceptionType, typename CharT = char,
-          ndof::allocator_like Allocator = std::allocator<CharT>>
-          requires(get_exceptions_enabled() &&
-                   std::derived_from<std::remove_cvref_t<ExceptionType>,
-                                     ndof::error::basic_exception<CharT>>)
-[[nodiscard]] auto make_ndof_exception(
-    ExceptionType& exception,
-    std::source_location source_location_value = std::source_location::current(),
-    const Allocator& allocator = Allocator()) {
+    requires(
+        get_exceptions_enabled() &&
+        std::derived_from<std::remove_cvref_t<ExceptionType>, ndof::error::basic_exception<CharT>> &&
+        !ndof::allocator_aware<std::remove_cvref_t<ExceptionType>>)
+[[nodiscard]] auto
+generate_or_throw_ndof_exception(ExceptionType& exception,
+                    std::source_location source_location_value = std::source_location::current(),
+                    const Allocator& allocator = Allocator()) {
 
     using captured_exception_type = std::remove_cvref_t<ExceptionType>;
     return basic_explicit_inner_exception<captured_exception_type, CharT, Allocator>(
-        std::forward<ExceptionType>(exception),
-        source_location_value,
-        allocator);
+        std::forward<ExceptionType>(exception), source_location_value, allocator);
+}
+
+template <typename ExceptionType, typename CharT = char>
+    requires(
+        get_exceptions_enabled() &&
+        std::derived_from<std::remove_cvref_t<ExceptionType>, ndof::error::basic_exception<CharT>> &&
+        ndof::allocator_aware<std::remove_cvref_t<ExceptionType>>)
+[[nodiscard]] auto
+generate_or_throw_ndof_exception(ExceptionType& exception,
+                    std::source_location source_location_value = std::source_location::current(),
+                    const std::remove_cvref_t<decltype(exception.get_allocator())>& allocator =
+                        std::remove_cvref_t<decltype(exception.get_allocator())>()) {
+
+    using captured_exception_type = std::remove_cvref_t<ExceptionType>;
+    using allocator_type = std::remove_cvref_t<decltype(exception.get_allocator())>;
+    return basic_explicit_inner_exception<captured_exception_type, CharT, allocator_type>(
+        std::forward<ExceptionType>(exception), source_location_value, allocator);
 }
 
 template <typename ExceptionType, typename CharT = char,
           ndof::allocator_like Allocator = std::allocator<CharT>>
-          requires(get_exceptions_enabled() &&
-                   !std::derived_from<std::remove_cvref_t<ExceptionType>,
-                                      ndof::error::basic_exception<CharT>>)
-void make_ndof_exception(
+    requires(
+        get_exceptions_enabled() &&
+        !std::derived_from<std::remove_cvref_t<ExceptionType>, ndof::error::basic_exception<CharT>> &&
+        !ndof::allocator_aware<std::remove_cvref_t<ExceptionType>>)
+void generate_or_throw_ndof_exception(
     ExceptionType& exception,
     std::source_location source_location_value = std::source_location::current(),
     const Allocator& allocator = Allocator()) {
 
     using captured_exception_type = std::remove_cvref_t<ExceptionType>;
     throw basic_explicit_inner_exception<captured_exception_type, CharT, Allocator>(
-        std::forward<ExceptionType>(exception),
-        source_location_value,
-        allocator);
+        std::forward<ExceptionType>(exception), source_location_value, allocator);
+}
+
+template <typename ExceptionType, typename CharT = char>
+    requires(
+        get_exceptions_enabled() &&
+        !std::derived_from<std::remove_cvref_t<ExceptionType>, ndof::error::basic_exception<CharT>> &&
+        ndof::allocator_aware<std::remove_cvref_t<ExceptionType>>)
+void generate_or_throw_ndof_exception(
+    ExceptionType& exception,
+    std::source_location source_location_value = std::source_location::current()) {
+
+    using captured_exception_type = std::remove_cvref_t<ExceptionType>;
+    using allocator_type = std::remove_cvref_t<decltype(exception.get_allocator())>;
+    throw basic_explicit_inner_exception<captured_exception_type, CharT, allocator_type>(
+        std::forward<ExceptionType>(exception), source_location_value, exception.get_allocator());
 }
 
 } // namespace ndof::error
-
- 
