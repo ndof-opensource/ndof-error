@@ -49,13 +49,10 @@ template<class T, class Alloc, class... Args>
 auto allocate_unique(Alloc alloc, Args&&... args)
 {
     using A = typename std::allocator_traits<Alloc>::template rebind_alloc<T>;
-
     using traits = std::allocator_traits<A>;
 
     A a{alloc};
-
     T* p = traits::allocate(a, 1);
-
     try {
         traits::construct(a, p, std::forward<Args>(args)...);
     }
@@ -63,6 +60,5 @@ auto allocate_unique(Alloc alloc, Args&&... args)
         traits::deallocate(a, p, 1);
         throw;
     }
-
     return std::unique_ptr<T, allocator_deleter<T, Alloc>>{p, allocator_deleter<T, Alloc>{a}};
 }
