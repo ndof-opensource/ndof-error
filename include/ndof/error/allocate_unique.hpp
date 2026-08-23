@@ -3,6 +3,7 @@
 #include <type_traits>
 
 // TODO: Move these to core.
+// TODO: Update to use try/catch blocks if exceptions are enabled, and use std::terminate() if exceptions are disabled.
 template<class T>
 concept bounded_array = std::is_bounded_array_v<T>;
 
