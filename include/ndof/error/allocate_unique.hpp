@@ -1,3 +1,4 @@
+#include "ndof/error/allocator_support.hpp"
 #include <exception>
 #include <memory>
 #include <type_traits>
@@ -10,7 +11,7 @@ concept bounded_array = std::is_bounded_array_v<T>;
 template<class T>
 concept unbounded_array = std::is_unbounded_array_v<T>;
 
-template<class T, class Alloc>
+template<class T, class Alloc >
 struct deleter_with_allocator {
     using element_type = std::remove_extent_t<T>;
     using pointer = element_type*;
