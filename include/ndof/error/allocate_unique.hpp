@@ -12,6 +12,7 @@ concept unbounded_array = std::is_unbounded_array_v<T>;
 template<class T, class Alloc>
 struct allocator_deleter {
     using element_type = std::remove_extent_t<T>;
+    using pointer = element_type*;
 
     using allocator_type =
         typename std::allocator_traits<Alloc>::template rebind_alloc<element_type>;
@@ -46,6 +47,7 @@ struct allocator_deleter {
 };
 
 template<class T, class Alloc, class... Args>
+    requires (!std::is_array_v<T>)
 auto allocate_unique(Alloc alloc, Args&&... args)
 {
     using A = typename std::allocator_traits<Alloc>::template rebind_alloc<T>;
@@ -61,4 +63,55 @@ auto allocate_unique(Alloc alloc, Args&&... args)
         throw;
     }
     return std::unique_ptr<T, allocator_deleter<T, Alloc>>{p, allocator_deleter<T, Alloc>{a}};
+}
+
+template<class T, class Alloc>
+    requires bounded_array<T>
+auto allocate_unique(Alloc alloc)
+{
+    using element_type = std::remove_extent_t<T>;
+    using A = typename std::allocator_traits<Alloc>::template rebind_alloc<element_type>;
+    using traits = std::allocator_traits<A>;
+
+    A a{alloc};
+    constexpr std::size_t count = std::extent_v<T>;
+    element_type* p = traits::allocate(a, count);
+    std::size_t constructed = 0;
+    try {
+        for (; constructed < count; ++constructed)
+            traits::construct(a, p + constructed);
+    }
+    catch (...) {
+        while (constructed != 0)
+            traits::destroy(a, p + --constructed);
+        traits::deallocate(a, p, count);
+        throw;
+    }
+    return std::unique_ptr<T, allocator_deleter<T, Alloc>>{
+        p, allocator_deleter<T, Alloc>{a, count}};
+}
+
+template<class T, class Alloc>
+    requires unbounded_array<T>
+auto allocate_unique(Alloc alloc, std::size_t count)
+{
+    using element_type = std::remove_extent_t<T>;
+    using A = typename std::allocator_traits<Alloc>::template rebind_alloc<element_type>;
+    using traits = std::allocator_traits<A>;
+
+    A a{alloc};
+    element_type* p = traits::allocate(a, count);
+    std::size_t constructed = 0;
+    try {
+        for (; constructed < count; ++constructed)
+            traits::construct(a, p + constructed);
+    }
+    catch (...) {
+        while (constructed != 0)
+            traits::destroy(a, p + --constructed);
+        traits::deallocate(a, p, count);
+        throw;
+    }
+    return std::unique_ptr<T, allocator_deleter<T, Alloc>>{
+        p, allocator_deleter<T, Alloc>{a, count}};
 }
