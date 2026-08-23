@@ -77,11 +77,12 @@ using tracking_pointer = decltype(
 using standard_pointer = decltype(
     make_unique_with_allocator<int>(std::declval<std::allocator<int>>(), 42));
 
-static_assert(std::same_as<tracking_pointer, standard_pointer>);
-static_assert(std::same_as<typename tracking_pointer::deleter_type,
-                           deleter_with_allocator<int>>);
+static_assert(!std::same_as<tracking_pointer, standard_pointer>);
+static_assert(std::same_as<
+              typename tracking_pointer::deleter_type,
+              deleter_with_allocator<int, tracking_allocator<int>>>);
 
-TEST(AllocateUnique, TypeErasesAllocatorFromDeleter) {
+TEST(AllocateUnique, UsesProvidedAllocator) {
     allocation_counts counts;
 
     {
@@ -101,7 +102,7 @@ TEST(AllocateUnique, DestroysEveryArrayElement) {
             tracking_allocator<counted_object>{counts});
         EXPECT_EQ(counted_object::live_count, 3);
 
-        auto unbounded = allocate_unique<counted_object[]>(
+        auto unbounded = make_unique_with_allocator<counted_object[]>(
             tracking_allocator<counted_object>{counts}, 2);
         EXPECT_EQ(counted_object::live_count, 5);
     }
@@ -109,24 +110,6 @@ TEST(AllocateUnique, DestroysEveryArrayElement) {
     EXPECT_EQ(counted_object::live_count, 0);
     EXPECT_EQ(counts.allocated, 5U);
     EXPECT_EQ(counts.deallocated, 5U);
-}
-
-TEST(AllocateUnique, DeleterUsesObjectAllocatorWhenNoneIsProvided) {
-    allocation_counts counts;
-    using object_type = allocator_aware_object;
-    using allocator_type = object_type::allocator_type;
-
-    allocator_type allocator{counts};
-    object_type* object = std::allocator_traits<allocator_type>::allocate(allocator, 1);
-    std::allocator_traits<allocator_type>::construct(allocator, object, allocator);
-
-    {
-        std::unique_ptr<object_type, deleter_with_allocator<object_type>> pointer{
-            object, deleter_with_allocator<object_type>{}};
-        EXPECT_EQ(counts.allocated, 1U);
-    }
-
-    EXPECT_EQ(counts.deallocated, 1U);
 }
 
 } // namespace

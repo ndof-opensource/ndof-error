@@ -40,6 +40,17 @@
 #endif
 #endif
 
+// Determine whether C++ exceptions are enabled based on standard compiler switches.
+#ifndef NDOF_EXCEPTIONS_ENABLED
+#if defined(__cpp_exceptions)
+#define NDOF_EXCEPTIONS_ENABLED 1
+#elif defined(_MSC_VER) && defined(_CPPUNWIND)
+#define NDOF_EXCEPTIONS_ENABLED 1
+#else
+#define NDOF_EXCEPTIONS_ENABLED 0
+#endif
+#endif
+
 #if defined(NDOF_RTTI_ENABLED) 
 #include <typeindex>
 using type_token = std::type_index;
@@ -169,21 +180,6 @@ using default_string_view = std::basic_string_view<ndof::default_char_t, default
             return default_string_view{NDOF_STR("ndof_type_index")};
     }
 }
-
-// Determine whether C++ exceptions are enabled based on standard compiler switches.
-#ifndef NDOF_EXCEPTIONS_ENABLED
-#if defined(__cpp_exceptions)
-#define NDOF_EXCEPTIONS_ENABLED 1
-#elif defined(_MSC_VER) && defined(_CPPUNWIND)
-#define NDOF_EXCEPTIONS_ENABLED 1
-#else
-#define NDOF_EXCEPTIONS_ENABLED 0
-#endif
-#endif
- 
-
-
-
 
 } // namespace ndof
 #endif // NDOF_ERROR_CONFIGS_HPP
