@@ -2,6 +2,7 @@
 #include <memory>
 #include <type_traits>
 
+// TODO: Move these to core.
 template<class T>
 concept bounded_array = std::is_bounded_array_v<T>;
 
