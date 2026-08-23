@@ -92,9 +92,14 @@ inline auto get_default_allocator() noexcept {
 using default_allocator_t = decltype(get_default_allocator());
 
 template<typename T>
-using rebind_default_allocator_t = typename std::allocator_traits<default_allocator_t>::template rebind_alloc<T>;
+using rebound_default_allocator_t = typename std::allocator_traits<default_allocator_t>::template rebind_alloc<T>;
 
-} // namespace ndof
+template<typename T>
+rebound_default_allocator_t<T> get_rebound_default_allocator() noexcept {
+    return rebound_default_allocator_t<T>(get_default_allocator());
+}
+
+} // namespace ndof::error
 
 #endif
 
