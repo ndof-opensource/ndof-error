@@ -48,7 +48,7 @@ struct allocator_deleter {
 
 template<class T, class Alloc, class... Args>
     requires (!std::is_array_v<T>)
-auto allocate_unique(Alloc alloc, Args&&... args)
+auto make_unique_with_allocator(Alloc alloc, Args&&... args)
 {
     using A = typename std::allocator_traits<Alloc>::template rebind_alloc<T>;
     using traits = std::allocator_traits<A>;
@@ -59,6 +59,7 @@ auto allocate_unique(Alloc alloc, Args&&... args)
         traits::construct(a, p, std::forward<Args>(args)...);
     }
     catch (...) {
+        traits::destroy(a, p);
         traits::deallocate(a, p, 1);
         throw;
     }
@@ -67,7 +68,7 @@ auto allocate_unique(Alloc alloc, Args&&... args)
 
 template<class T, class Alloc>
     requires bounded_array<T>
-auto allocate_unique(Alloc alloc)
+auto make_unique_with_allocator(Alloc alloc)
 {
     using element_type = std::remove_extent_t<T>;
     using A = typename std::allocator_traits<Alloc>::template rebind_alloc<element_type>;
