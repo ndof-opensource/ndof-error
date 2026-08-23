@@ -1,6 +1,4 @@
-#include "ndof/error/allocator_support.hpp"
 #include <exception>
-#include <functional>
 #include <memory>
 #include <type_traits>
 
@@ -12,51 +10,25 @@ concept bounded_array = std::is_bounded_array_v<T>;
 template<class T>
 concept unbounded_array = std::is_unbounded_array_v<T>;
 
-template<class T>
+template<class T, class Alloc>
 struct deleter_with_allocator {
     using element_type = std::remove_extent_t<T>;
     using pointer = element_type*;
 
-    template<class Alloc>
-        requires (!std::same_as<std::remove_cvref_t<Alloc>, deleter_with_allocator> &&
-                  ndof::allocator_like<Alloc>)
-    explicit deleter_with_allocator(Alloc alloc, std::size_t count = 1)
-        : destroy_([alloc = allocator_type<Alloc>(alloc), count](element_type* p) mutable noexcept {
-            destroy(alloc, p, count);
-        }) {}
-
-    explicit deleter_with_allocator(std::size_t count = 1)
-        requires requires(const element_type& object) {
-            typename element_type::allocator_type;
-            { object.get_allocator() } ->
-                std::convertible_to<typename element_type::allocator_type>;
-        }
-        : destroy_([count](element_type* p) noexcept {
-            if (!p)
-                return;
-
-            auto alloc = p->get_allocator();
-            destroy(alloc, p, count);
-        }) {}
-
-    void operator()(element_type* p) noexcept {
-        destroy_(p);
-    }
-
-private:
-    template<class Alloc>
     using allocator_type =
         typename std::allocator_traits<Alloc>::template rebind_alloc<element_type>;
 
-    template<class Alloc>
-    static void destroy(Alloc& alloc, element_type* p, std::size_t count) noexcept {
+    allocator_type alloc;
+    std::size_t count = 1;
+
+    void operator()(element_type* p) noexcept {
         if (!p)
             return;
 
-        using traits = std::allocator_traits<Alloc>;
+        using traits = std::allocator_traits<allocator_type>;
 
-        try {
-            if constexpr (std::is_array_v<T>) {
+        try{
+            if constexpr (unbounded_array<T>) {
                 for (std::size_t i = 0; i < count; ++i)
                     traits::destroy(alloc, p + i);
 
@@ -73,8 +45,6 @@ private:
             std::terminate(); // Terminate the program if an exception is thrown during destruction, as throwing from a destructor can lead to undefined behavior.
         }
     }
-
-    std::function<void(element_type*)> destroy_;
 };
 
 template<class T, class Alloc, class... Args>
@@ -85,7 +55,6 @@ auto make_unique_with_allocator(Alloc alloc, Args&&... args)
     using traits = std::allocator_traits<A>;
 
     A a{alloc};
-    deleter_with_allocator<T> deleter{a};
     T* p = traits::allocate(a, 1);
     try {
         traits::construct(a, p, std::forward<Args>(args)...);
@@ -95,7 +64,7 @@ auto make_unique_with_allocator(Alloc alloc, Args&&... args)
         traits::deallocate(a, p, 1);
         throw;
     }
-    return std::unique_ptr<T, deleter_with_allocator<T>>{p, std::move(deleter)};
+    return std::unique_ptr<T, deleter_with_allocator<T, Alloc>>{p, deleter_with_allocator<T, Alloc>{a}};
 }
 
 template<class T, class Alloc>
@@ -108,7 +77,6 @@ auto make_unique_with_allocator(Alloc alloc)
 
     A a{alloc};
     constexpr std::size_t count = std::extent_v<T>;
-    deleter_with_allocator<T> deleter{a, count};
     element_type* p = traits::allocate(a, count);
     std::size_t constructed = 0;
     try {
@@ -121,7 +89,8 @@ auto make_unique_with_allocator(Alloc alloc)
         traits::deallocate(a, p, count);
         throw;
     }
-    return std::unique_ptr<T, deleter_with_allocator<T>>{p, std::move(deleter)};
+    return std::unique_ptr<T, deleter_with_allocator<T, Alloc>>{
+        p, deleter_with_allocator<T, Alloc>{a, count}};
 }
 
 template<class T, class Alloc>
@@ -133,7 +102,6 @@ auto allocate_unique(Alloc alloc, std::size_t count)
     using traits = std::allocator_traits<A>;
 
     A a{alloc};
-    deleter_with_allocator<T> deleter{a, count};
     element_type* p = traits::allocate(a, count);
     std::size_t constructed = 0;
     try {
@@ -146,5 +114,6 @@ auto allocate_unique(Alloc alloc, std::size_t count)
         traits::deallocate(a, p, count);
         throw;
     }
-    return std::unique_ptr<T, deleter_with_allocator<T>>{p, std::move(deleter)};
+    return std::unique_ptr<T, deleter_with_allocator<T, Alloc>>{
+        p, deleter_with_allocator<T, Alloc>{a, count}};
 }
