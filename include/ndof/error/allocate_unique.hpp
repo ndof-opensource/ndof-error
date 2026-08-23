@@ -11,7 +11,7 @@ template<class T>
 concept unbounded_array = std::is_unbounded_array_v<T>;
 
 template<class T, class Alloc>
-struct allocator_deleter {
+struct deleter_with_allocator {
     using element_type = std::remove_extent_t<T>;
     using pointer = element_type*;
 
@@ -64,7 +64,7 @@ auto make_unique_with_allocator(Alloc alloc, Args&&... args)
         traits::deallocate(a, p, 1);
         throw;
     }
-    return std::unique_ptr<T, allocator_deleter<T, Alloc>>{p, allocator_deleter<T, Alloc>{a}};
+    return std::unique_ptr<T, deleter_with_allocator<T, Alloc>>{p, deleter_with_allocator<T, Alloc>{a}};
 }
 
 template<class T, class Alloc>
@@ -89,8 +89,8 @@ auto make_unique_with_allocator(Alloc alloc)
         traits::deallocate(a, p, count);
         throw;
     }
-    return std::unique_ptr<T, allocator_deleter<T, Alloc>>{
-        p, allocator_deleter<T, Alloc>{a, count}};
+    return std::unique_ptr<T, deleter_with_allocator<T, Alloc>>{
+        p, deleter_with_allocator<T, Alloc>{a, count}};
 }
 
 template<class T, class Alloc>
@@ -114,6 +114,6 @@ auto allocate_unique(Alloc alloc, std::size_t count)
         traits::deallocate(a, p, count);
         throw;
     }
-    return std::unique_ptr<T, allocator_deleter<T, Alloc>>{
-        p, allocator_deleter<T, Alloc>{a, count}};
+    return std::unique_ptr<T, deleter_with_allocator<T, Alloc>>{
+        p, deleter_with_allocator<T, Alloc>{a, count}};
 }
