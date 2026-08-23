@@ -1,0 +1,1 @@
+[8/22/26 11:46] TODO: Consider an mcp server that assembles a pipeline from store assets.
