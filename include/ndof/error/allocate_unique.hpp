@@ -97,12 +97,12 @@ auto make_unique_with_allocator(Alloc alloc)
 
 template<class T, class Alloc>
     requires unbounded_array<T>
-auto allocate_unique(Alloc alloc, std::size_t count)
+auto make_unique_with_allocator(Alloc alloc, std::size_t count)
 {
     using element_type = std::remove_extent_t<T>;
     using A = typename std::allocator_traits<Alloc>::template rebind_alloc<element_type>;
     using traits = std::allocator_traits<A>;
-
+ 
     A a{alloc};
     element_type* p = traits::allocate(a, count);
     std::size_t constructed = 0;
