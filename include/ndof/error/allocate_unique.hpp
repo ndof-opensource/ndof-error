@@ -19,7 +19,8 @@ struct deleter_with_allocator {
     using allocator_type =
         typename std::allocator_traits<Alloc>::template rebind_alloc<element_type>;
 
-    allocator_type alloc;
+    
+    [[no_unique_address]] allocator_type alloc;
     std::size_t count = 1;
 
     void operator()(element_type* p) noexcept {
