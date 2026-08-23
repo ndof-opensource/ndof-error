@@ -99,6 +99,8 @@ rebound_default_allocator_t<T> get_rebound_default_allocator() noexcept {
     return rebound_default_allocator_t<T>(get_default_allocator());
 }
 
+
+
 } // namespace ndof::error
 
 #endif
