@@ -145,7 +145,7 @@ using default_string_view = std::basic_string_view<ndof::default_char_t, default
 #endif
 }
 
-[[nodiscard]] consteval bool get_exceptions_enabled() noexcept {
+[[nodiscard]] consteval bool exceptions_feature_enabled() noexcept {
 #if defined(NDOF_EXCEPTIONS_ENABLED) && (NDOF_EXCEPTIONS_ENABLED)
     return true;
 #else

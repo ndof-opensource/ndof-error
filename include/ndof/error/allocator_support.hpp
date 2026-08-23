@@ -73,6 +73,27 @@ concept allocator_aware_move_propagating =
         typename std::allocator_traits<typename T::allocator_type>::propagate_on_container_move_assignment;
     } && std::allocator_traits<typename T::allocator_type>::propagate_on_container_move_assignment::value;
  
+template <typename T>
+using get_allocator_result_type_t = std::remove_cvref_t<decltype(
+    std::declval<std::remove_cvref_t<T>&>().get_allocator())>;
+
+template <typename T, typename Allocator>
+concept allocator_compatible_with_get_allocator =
+    requires {
+        typename get_allocator_result_type_t<T>;
+    } && ndof::allocator_compatible_with<get_allocator_result_type_t<T>, Allocator>;
+
+
+// TODO: Fix this. Should be hidden and should use a singleton factory.
+inline auto get_default_allocator() noexcept {
+    return std::allocator<char>();
+}
+
+using default_allocator_t = decltype(get_default_allocator());
+
+template<typename T>
+using rebind_default_allocator_t = typename std::allocator_traits<default_allocator_t>::template rebind_alloc<T>;
+
 } // namespace ndof
 
 #endif
