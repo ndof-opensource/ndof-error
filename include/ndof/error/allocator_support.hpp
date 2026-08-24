@@ -1,6 +1,6 @@
 #if !defined(NDOF_ERROR_ALLOCATOR_SUPPORT_HPP)
 #define NDOF_ERROR_ALLOCATOR_SUPPORT_HPP
-#include "ndof/error/configs.hpp"
+
 #include <concepts>
 #include <expected>
 #include <memory>

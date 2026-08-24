@@ -1,6 +1,7 @@
 // Copyright 2026 The ndof Authors
 // SPDX-License-Identifier: Apache-2.0
-
+#ifndef NDOF_ERROR_OBJECT_HPP
+#define NDOF_ERROR_OBJECT_HPP
 #include "ndof/error/allocator_support.hpp"
 #include "ndof/error/configs.hpp"
  
@@ -8,6 +9,7 @@
 // TODO: Make sure the method classifier stuff specializes on noexcept.
 
 #include <algorithm>
+#include <concepts>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -55,18 +57,51 @@ constexpr auto expected_name(node_kind kind) {
     return "invalid";
 }
 
+
+template<typename T, typename CharT, typename CharTraits>
+concept character_compatible_type = requires {
+    typename std::remove_cvref_t<T>::value_type;
+    typename std::remove_cvref_t<T>::traits_type;
+    requires std::same_as<typename std::remove_cvref_t<T>::value_type, CharT>;
+    requires std::same_as<typename std::remove_cvref_t<T>::traits_type, CharTraits>;
+};
+
+template<typename T>
+struct is_basic_string : std::false_type {};
+
+template<typename CharT, typename CharTraits, typename Allocator>
+struct is_basic_string<std::basic_string<CharT, CharTraits, Allocator>> : std::true_type {};
+
+template<typename S, typename CharT, typename CharTraits>
+concept character_compatible_string_type =
+    character_compatible_type<S, CharT, CharTraits>
+    && is_basic_string<std::remove_cvref_t<S>>::value;
+
 // Node type traits
 template<typename CharT, typename CharTraits, allocator_like Allocator>
 struct node_type_traits {
+    
     using char_type = CharT;
     using allocator_type = Allocator;
     using string_type = std::basic_string<CharT, CharTraits, Allocator>;
+    using string_view_type = std::basic_string_view<CharT, CharTraits>;
     using object_type = basic_object<CharT, CharTraits, Allocator>;
-    using sequence_type = std::vector<object_type, Allocator>;
+    using sequence_type = std::vector<
+        object_type,
+        typename std::allocator_traits<Allocator>::template rebind_alloc<object_type>>;
     using attribute_type = std::pair<string_type, string_type>;
     using attributes_map = std::vector<
         attribute_type,
         typename std::allocator_traits<Allocator>::template rebind_alloc<attribute_type>>;
+    using member_type = std::pair<string_type, object_type>;
+    using members_map = std::vector<
+        member_type,
+        typename std::allocator_traits<Allocator>::template rebind_alloc<member_type>>;
+    
+    template<typename String>
+    consteval bool is_character_compatible() {
+        return character_compatible_type<String, CharT, CharTraits>;
+    }
 };
 
 struct mismatch_state {
@@ -94,169 +129,212 @@ struct mismatch_state {
 template<typename CharT, typename CharTraits, allocator_like Allocator>
 class text_node {
 public:
-    using char_type = CharT;
-    using allocator_type = Allocator;
-    using string_type = std::basic_string<CharT, CharTraits, Allocator>;
+    using node_traits = node_type_traits<CharT, CharTraits, Allocator>;
 
-    text_node(const allocator_type& alloc = allocator_type())
+    text_node(const typename node_traits::allocator_type& alloc = typename node_traits::allocator_type())
         : value_(alloc) {}
-
-    template<typename OtherAllocator>
-        requires allocator_compatible_with<OtherAllocator, allocator_type>
     text_node(
-        const std::basic_string<CharT, CharTraits, OtherAllocator>& val,
-        const OtherAllocator& alloc = OtherAllocator())
-        : value_(val.begin(), val.end(), allocator_type(alloc)) {}
+        const character_compatible_string_type<CharT, CharTraits> auto& val,
+        const Allocator& alloc = Allocator())
+        : value_(val.begin(), val.end(), typename node_traits::allocator_type(alloc)) {}
 
-    template<typename OtherAllocator>
-        requires allocator_compatible_with<OtherAllocator, allocator_type>
     text_node(
-        std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>&& val,
-        const OtherAllocator& alloc = OtherAllocator())
-        : value_(std::make_move_iterator(val.begin()), std::make_move_iterator(val.end()), alloc) {}
-
-    text_node(const string_type& val, const allocator_type& alloc = allocator_type())
-        : value_(val, alloc) {}
-
-    text_node(string_type&& val, const allocator_type& alloc = allocator_type())
+        character_compatible_string_type<CharT, CharTraits> auto&& val,
+        const typename node_traits::allocator_type& alloc = typename node_traits::allocator_type())
+        : value_(val.begin(), val.end(), alloc) {}
+ 
+    // The resulting string always uses destination_alloc. 
+    //   It may steal the source allocation only when the allocators compare equal; 
+    //   otherwise it performs an element-wise move/copy into fresh storage from destination_alloc.
+    text_node(typename node_traits::string_type&& val,
+              const typename node_traits::allocator_type& alloc = typename node_traits::allocator_type())
         : value_(std::move(val), alloc) {}
 
     [[nodiscard]] node_kind kind() const noexcept {
         return node_kind::text;
     }
 
-    [[nodiscard]] const string_type& value() const noexcept {
+    [[nodiscard]] const typename node_traits::string_type& value() const noexcept {
         return value_;
     }
 
-    void set_value(const string_type& val) {
+    void set_value(const typename node_traits::string_type& val) {
         value_ = val;
     }
 
-    void set_value(string_type&& val) {
+    void set_value(typename node_traits::string_type&& val) {
         value_ = std::move(val);
     }
 
-    [[nodiscard]] const allocator_type& get_allocator() const noexcept {
+    [[nodiscard]] const typename node_traits::allocator_type& get_allocator() const noexcept {
         return value_.get_allocator();
     }
 
 private:
-    string_type value_;
+    typename node_traits::string_type value_;
 };
+
+template<allocator_like Allocator>
+text_node(const Allocator&)
+    -> text_node<
+        typename std::allocator_traits<Allocator>::value_type,
+        default_char_traits_t<typename std::allocator_traits<Allocator>::value_type>,
+        Allocator>;
+
+template<typename CharT, typename CharTraits, allocator_like SourceAllocator>
+text_node(const std::basic_string<CharT, CharTraits, SourceAllocator>&)
+    -> text_node<CharT, CharTraits, SourceAllocator>;
+
+template<typename CharT, typename CharTraits, allocator_like SourceAllocator, allocator_like DestinationAllocator>
+text_node(
+    const std::basic_string<CharT, CharTraits, SourceAllocator>&,
+    const DestinationAllocator&)
+    -> text_node<CharT, CharTraits, DestinationAllocator>;
 
 // Attribute node - represents key-value metadata
 template<typename CharT, typename CharTraits, allocator_like Allocator>
 class attribute_node {
 public:
-    using char_type = CharT;
-    using allocator_type = Allocator;
-    using string_type = std::basic_string<CharT, CharTraits, Allocator>;
+    using node_traits = node_type_traits<CharT, CharTraits, Allocator>;
 
-
-    attribute_node(const allocator_type& alloc = allocator_type())
+    attribute_node(const Allocator& alloc = Allocator())
         : name_(alloc), value_(alloc) {}
 
-    template<typename OtherAllocator>
-        requires allocator_compatible_with<OtherAllocator, allocator_type>
     attribute_node(
-        const std::basic_string<CharT, CharTraits, OtherAllocator>& name,
-        const std::basic_string<CharT, CharTraits, OtherAllocator>& value,
-        const OtherAllocator& alloc = OtherAllocator())
-        : name_(name.begin(), name.end(), allocator_type(alloc)),
-          value_(value.begin(), value.end(), allocator_type(alloc)) {}
+                const character_compatible_string_type<CharT, CharTraits> auto& name,
+                const character_compatible_string_type<CharT, CharTraits> auto& value,
+                const Allocator& alloc = Allocator())
+                : name_(name.begin(), name.end(), alloc),
+                    value_(value.begin(), value.end(), alloc) {}
 
-
-    // Select the allocator rather than moving it from either source string.
-    template<typename OtherAllocator>
-        requires allocator_compatible_with<OtherAllocator, allocator_type>
     attribute_node(
-        std::basic_string<CharT, CharTraits, OtherAllocator>&& name,
-        std::basic_string<CharT, CharTraits, OtherAllocator>&& value,
-        const OtherAllocator& alloc = OtherAllocator())
-                : name_(std::make_move_iterator(name.begin()), std::make_move_iterator(name.end()), allocator_type(alloc)),
-                  value_(std::make_move_iterator(value.begin()), std::make_move_iterator(value.end()), allocator_type(alloc)) {
+                character_compatible_string_type<CharT, CharTraits> auto&& name,
+                character_compatible_string_type<CharT, CharTraits> auto&& value,
+                const Allocator& alloc = Allocator())
+                : name_(name.begin(), name.end(), alloc),
+                    value_(value.begin(), value.end(), alloc) {}
 
-        }
-
-    attribute_node(const string_type& name, const string_type& value, const allocator_type& alloc = allocator_type())
+    attribute_node(const typename node_traits::string_type& name, const typename node_traits::string_type& value,
+                   const Allocator& alloc = Allocator())
         : name_(name, alloc), value_(value, alloc) {}
 
-    [[nodiscard]] const string_type& name() const noexcept {
+    [[nodiscard]] const typename node_traits::string_type& name() const noexcept {
         return name_;
     }
 
-    [[nodiscard]] const string_type& value() const noexcept {
+    [[nodiscard]] const typename node_traits::string_type& value() const noexcept {
         return value_;
     }
 
-    void set_name(const string_type& n) {
+    void set_name(const typename node_traits::string_type& n) {
         name_ = n;
     }
 
-    void set_value(const string_type& v) {
+    void set_value(const typename node_traits::string_type& v) {
         value_ = v;
     }
 
-    [[nodiscard]] const allocator_type& get_allocator() const noexcept {
+    [[nodiscard]] const typename node_traits::allocator_type& get_allocator() const noexcept {
         return name_.get_allocator();
     }
 
 private:
-    string_type name_;
-    string_type value_;
+    typename node_traits::string_type name_;
+    typename node_traits::string_type value_;
 };
 
+template<allocator_like Allocator>
+attribute_node(const Allocator&)
+    -> attribute_node<
+        typename std::allocator_traits<Allocator>::value_type,
+        default_char_traits_t<typename std::allocator_traits<Allocator>::value_type>,
+        Allocator>;
+
+template<
+    typename CharT,
+    typename CharTraits,
+    allocator_like NameAllocator,
+    allocator_like ValueAllocator>
+attribute_node(
+    const std::basic_string<CharT, CharTraits, NameAllocator>&,
+    const std::basic_string<CharT, CharTraits, ValueAllocator>&)
+    -> attribute_node<CharT, CharTraits, NameAllocator>;
+
+template<
+    typename CharT,
+    typename CharTraits,
+    allocator_like NameAllocator,
+    allocator_like ValueAllocator,
+    allocator_like DestinationAllocator>
+attribute_node(
+    const std::basic_string<CharT, CharTraits, NameAllocator>&,
+    const std::basic_string<CharT, CharTraits, ValueAllocator>&,
+    const DestinationAllocator&)
+    -> attribute_node<CharT, CharTraits, DestinationAllocator>;
+
 // Comment node - represents metadata/comments (XML comments, YAML comments)
-template<typename CharT, typename CharTraits, typename Allocator>
+template<typename CharT, typename CharTraits, allocator_like Allocator>
 class comment_node {
 public:
-    using char_type = CharT;
-    using allocator_type = Allocator;
-    using string_type = std::basic_string<CharT, CharTraits, Allocator>;
+    using node_traits = node_type_traits<CharT, CharTraits, Allocator>;
 
-    comment_node(const allocator_type& alloc = allocator_type())
+    comment_node(const Allocator& alloc = Allocator())
         : content_(alloc) {}
 
-    template<typename OtherAllocator>
-        requires allocator_compatible_with<OtherAllocator, allocator_type>
     comment_node(
-        const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& c,
-        const OtherAllocator& alloc = OtherAllocator())
-        : content_(c.begin(), c.end(), allocator_type(alloc)) {}
+        const character_compatible_string_type<CharT, CharTraits> auto& content,
+        const Allocator& alloc = Allocator())
+        : content_(content.begin(), content.end(), alloc) {}
 
-    template<typename OtherAllocator>
-        requires allocator_compatible_with<OtherAllocator, allocator_type>
     comment_node(
-        std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>&& c,
-        const OtherAllocator& alloc = OtherAllocator())
-        : content_(std::make_move_iterator(c.begin()), std::make_move_iterator(c.end()), alloc) {}
+        character_compatible_string_type<CharT, CharTraits> auto&& content,
+        const Allocator& alloc = Allocator())
+        : content_(content.begin(), content.end(), alloc) {}
 
-    comment_node(const string_type& c, const allocator_type& alloc = allocator_type())
+    comment_node(const typename node_traits::string_type& c,
+                 const Allocator& alloc = Allocator())
         : content_(c, alloc) {}
 
-    comment_node(string_type&& c, const allocator_type& alloc = allocator_type())
+    comment_node(typename node_traits::string_type&& c,
+                 const Allocator& alloc = Allocator())
         : content_(std::move(c), alloc) {}
 
     [[nodiscard]] node_kind kind() const noexcept {
         return node_kind::comment;
     }
 
-    [[nodiscard]] const string_type& content() const noexcept {
+    [[nodiscard]] const typename node_traits::string_type& content() const noexcept {
         return content_;
     }
 
-    void set_content(const string_type& c) {
+    void set_content(const typename node_traits::string_type& c) {
         content_ = c;
     }
 
-    [[nodiscard]] const allocator_type& get_allocator() const noexcept {
+    [[nodiscard]] const typename node_traits::allocator_type& get_allocator() const noexcept {
         return content_.get_allocator();
     }
 
 private:
-    string_type content_;
+    typename node_traits::string_type content_;
 };
+
+template<allocator_like Allocator>
+comment_node(const Allocator&)
+    -> comment_node<
+        typename std::allocator_traits<Allocator>::value_type,
+        default_char_traits_t<typename std::allocator_traits<Allocator>::value_type>,
+        Allocator>;
+
+template<typename CharT, typename CharTraits, allocator_like SourceAllocator>
+comment_node(const std::basic_string<CharT, CharTraits, SourceAllocator>&)
+    -> comment_node<CharT, CharTraits, SourceAllocator>;
+
+template<typename CharT, typename CharTraits, allocator_like SourceAllocator, allocator_like DestinationAllocator>
+comment_node(
+    const std::basic_string<CharT, CharTraits, SourceAllocator>&,
+    const DestinationAllocator&)
+    -> comment_node<CharT, CharTraits, DestinationAllocator>;
 
 // Forward declaration of basic_object for variant
 template<typename CharT, typename CharTraits, allocator_like Allocator>
@@ -269,7 +347,7 @@ using node_variant = std::variant<
     text_node<CharT, CharTraits, Allocator>,
     attribute_node<CharT, CharTraits, Allocator>,
     comment_node<CharT, CharTraits, Allocator>,
-    std::vector<basic_object<CharT, CharTraits, Allocator>, Allocator>
+    typename node_type_traits<CharT, CharTraits, Allocator>::sequence_type
 >;
 
 
@@ -277,92 +355,82 @@ using node_variant = std::variant<
 // TODO: Update the template argument list to accept a CharTraits template parameter for the string type, so that we can support custom character traits.
 //       That should be done throughout the entire library, so that we can support custom character traits for the string type.
 // Main object class - supports XML, JSON, YAML parsing
-template<typename CharT = char, typename CharTraits = default_char_traits_t<CharT>, allocator_like Allocator = std::allocator<CharT>>
+template<typename CharT = char, typename Traits = default_char_traits_t<CharT>, allocator_like Allocator = std::allocator<CharT>>
 class basic_object {
 public:
-    using char_type = CharT;
-    using allocator_type = Allocator;
-    using string_type = std::basic_string<CharT, CharTraits, Allocator>;
-    using string_view_type = std::basic_string_view<CharT, CharTraits>;
-    using text_node_type = text_node<CharT, CharTraits, Allocator>;
-    using attribute_node_type = attribute_node<CharT, CharTraits, Allocator>;
-    using comment_node_type = comment_node<CharT, CharTraits, Allocator>;
-    using variant_type = node_variant<CharT, CharTraits, Allocator>;
-    using attribute_type = std::pair<string_type, string_type>;
-    using attributes_map = std::vector<
-        attribute_type,
-        typename std::allocator_traits<Allocator>::template rebind_alloc<attribute_type>>;
-    using members_map = std::vector<
-        std::pair<string_type, basic_object>,
-        typename std::allocator_traits<Allocator>::template rebind_alloc<std::pair<string_type, basic_object>>
-    >;
-    using sequence_type = std::vector<basic_object, Allocator>;
+    using node_traits = node_type_traits<CharT, Traits, Allocator>;
+    using text_node_type = text_node<CharT, Traits, Allocator>;
+    using attribute_node_type = attribute_node<CharT, Traits, Allocator>;
+    using comment_node_type = comment_node<CharT, Traits, Allocator>;
+    using variant_type = node_variant<CharT, Traits, Allocator>;
 
     
     // Constructors
-    basic_object(const allocator_type& alloc = allocator_type())
+    basic_object(const Allocator& alloc = Allocator())
         : name_(alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc) {}
 
-    basic_object(node_kind k, const allocator_type& alloc = allocator_type())
+    basic_object(node_kind k, const Allocator& alloc = Allocator())
         : name_(alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc) {
         initialize_for_kind(k);
     }
 
-    template<typename OtherAllocator>
-        requires allocator_compatible_with<OtherAllocator, allocator_type>
+ 
+    template<typename String, allocator_like allocator_for_object = Allocator>
+        requires requires {
+            typename std::remove_cvref_t<String>::value_type;
+            typename std::remove_cvref_t<String>::traits_type;
+            requires std::same_as<typename std::remove_cvref_t<String>::value_type, CharT>;
+            requires std::same_as<typename std::remove_cvref_t<String>::traits_type, Traits>;
+            requires std::constructible_from<typename node_traits::allocator_type, const allocator_for_object&>;
+        }
     basic_object(
-        const std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>& n,
-        const OtherAllocator& alloc = OtherAllocator())
-        : name_(n.begin(), n.end(), allocator_type(alloc)), value_(std::monostate{}),
-          attributes_(allocator_type(alloc)), members_(allocator_type(alloc)), allocator_(alloc) {}
+        String&& n,
+        const allocator_for_object& alloc = get_default_allocator())
+                : name_(make_name(std::forward<String>(n), Allocator(alloc))), value_(std::monostate{}),
+                    attributes_(Allocator(alloc)), members_(Allocator(alloc)), allocator_(alloc) {}
 
-    template<typename OtherAllocator>
-        requires allocator_compatible_with<OtherAllocator, allocator_type>
-    basic_object(
-        std::basic_string<CharT, std::char_traits<CharT>, OtherAllocator>&& n,
-        const OtherAllocator& alloc = OtherAllocator())
-        : name_(std::make_move_iterator(n.begin()), std::make_move_iterator(n.end()), allocator_type(alloc)),
-          value_(std::monostate{}), attributes_(allocator_type(alloc)), members_(allocator_type(alloc)),
-          allocator_(alloc) {}
-
-    basic_object(const string_type& n, const allocator_type& alloc = allocator_type())
+        basic_object(const typename node_traits::string_type& n,
+                                 const typename node_traits::allocator_type& alloc = typename node_traits::allocator_type())
         : name_(n, alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc) {}
 
-    basic_object(string_type&& n, const allocator_type& alloc = allocator_type())
+        basic_object(typename node_traits::string_type&& n,
+                                 const typename node_traits::allocator_type& alloc = typename node_traits::allocator_type())
         : name_(std::move(n), alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc) {}
 
    
 
-    [[nodiscard]] const string_type& name() const noexcept {
+    [[nodiscard]] const typename node_traits::string_type& name() const noexcept {
         return name_;
     }
 
-    void set_name(const string_type& n) {
+    void set_name(const typename node_traits::string_type& n) {
         name_ = n;
     }
 
-    [[nodiscard]] const allocator_type& allocator() const noexcept {
+    [[nodiscard]] const typename node_traits::allocator_type& allocator() const noexcept {
         return allocator_;
     }
 
     // Attribute operations
-    [[nodiscard]] const attributes_map& attributes() const noexcept {
+    [[nodiscard]] const typename node_traits::attributes_map& attributes() const noexcept {
         return attributes_;
     }
 
-    [[nodiscard]] attributes_map& attributes() noexcept {
+    [[nodiscard]] typename node_traits::attributes_map& attributes() noexcept {
         return attributes_;
     }
 
-    void add_attribute(const string_type& attr_name, const string_type& attr_value) {
+    void add_attribute(const typename node_traits::string_type& attr_name,
+                       const typename node_traits::string_type& attr_value) {
         attributes_.emplace_back(attr_name, attr_value);
     }
 
-    void add_attribute(string_type&& attr_name, string_type&& attr_value) {
+    void add_attribute(typename node_traits::string_type&& attr_name,
+                       typename node_traits::string_type&& attr_value) {
         attributes_.emplace_back(std::move(attr_name), std::move(attr_value));
     }
 
-    [[nodiscard]] bool remove_attribute(const string_view_type& attr_name) {
+    [[nodiscard]] bool remove_attribute(const typename node_traits::string_view_type& attr_name) {
         auto it = std::find_if(attributes_.begin(), attributes_.end(),
             [attr_name](const auto& pair) { return pair.first == attr_name; });
         if (it != attributes_.end()) {
@@ -372,7 +440,8 @@ public:
         return false;
     }
 
-    [[nodiscard]] std::optional<string_type> get_attribute(const string_view_type& attr_name) const {
+    [[nodiscard]] std::optional<typename node_traits::string_type> get_attribute(
+        const typename node_traits::string_view_type& attr_name) const {
         auto it = std::find_if(attributes_.begin(), attributes_.end(),
             [attr_name](const auto& pair) { return pair.first == attr_name; });
         if (it != attributes_.end()) {
@@ -382,25 +451,25 @@ public:
     }
 
     // Member/mapping operations
-    [[nodiscard]] const members_map& members() const noexcept {
+    [[nodiscard]] const typename node_traits::members_map& members() const noexcept {
         return members_;
     }
 
-    [[nodiscard]] members_map& members() noexcept {
+    [[nodiscard]] typename node_traits::members_map& members() noexcept {
         return members_;
     }
 
-    [[nodiscard]] basic_object* add_member(const string_type& member_name) {
+    [[nodiscard]] basic_object* add_member(const typename node_traits::string_type& member_name) {
         members_.emplace_back(member_name, basic_object(allocator_));
         return &members_.back().second;
     }
 
-    [[nodiscard]] basic_object* add_member(const string_type& member_name, node_kind k) {
-        members_.emplace_back(member_name, basic_object(k, allocator_type()));
+    [[nodiscard]] basic_object* add_member(const typename node_traits::string_type& member_name, node_kind k) {
+        members_.emplace_back(member_name, basic_object(k, typename node_traits::allocator_type()));
         return &members_.back().second;
     }
 
-    [[nodiscard]] bool remove_member(const string_view_type& member_name) {
+    [[nodiscard]] bool remove_member(const typename node_traits::string_view_type& member_name) {
         auto it = std::find_if(members_.begin(), members_.end(),
             [member_name](const auto& pair) { return pair.first == member_name; });
         if (it != members_.end()) {
@@ -410,70 +479,88 @@ public:
         return false;
     }
 
-    [[nodiscard]] basic_object* get_member(const string_view_type& member_name) {
+    [[nodiscard]] std::optional<typename node_traits::member_type> extract_member(
+        const typename node_traits::string_view_type& member_name) {
         auto it = std::find_if(members_.begin(), members_.end(),
             [member_name](const auto& pair) { return pair.first == member_name; });
-        if (it != members_.end()) {
-            return &it->second;
+        if (it == members_.end()) {
+            return std::nullopt;
         }
-        return nullptr;
+
+        auto member = std::move(*it);
+        members_.erase(it);
+        return member;
     }
 
-    [[nodiscard]] const basic_object* get_member(const string_view_type& member_name) const {
+    
+
+    [[nodiscard]] std::optional<basic_object*> get_member(
+        const typename node_traits::string_view_type& member_name) {
         auto it = std::find_if(members_.begin(), members_.end(),
             [member_name](const auto& pair) { return pair.first == member_name; });
         if (it != members_.end()) {
             return &it->second;
         }
-        return nullptr;
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::optional<const basic_object*> get_member(
+        const typename node_traits::string_view_type& member_name) const {
+        auto it = std::find_if(members_.begin(), members_.end(),
+            [member_name](const auto& pair) { return pair.first == member_name; });
+        if (it != members_.end()) {
+            return &it->second;
+        }
+        return std::nullopt;
     }
 
     // Sequence/array operations
-    [[nodiscard]] sequence_type& elements() noexcept {
-        if (std::holds_alternative<sequence_type>(value_)) {
-            return std::get<sequence_type>(value_);
+    [[nodiscard]] typename node_traits::sequence_type& elements() noexcept {
+        if (std::holds_alternative<typename node_traits::sequence_type>(value_)) {
+            return std::get<typename node_traits::sequence_type>(value_);
         }
-        static sequence_type empty_seq(allocator_);
+        static typename node_traits::sequence_type empty_seq(allocator_);
         return empty_seq;
     }
 
-    [[nodiscard]] const sequence_type& elements() const noexcept {
-        if (std::holds_alternative<sequence_type>(value_)) {
-            return std::get<sequence_type>(value_);
+    [[nodiscard]] const typename node_traits::sequence_type& elements() const noexcept {
+        if (std::holds_alternative<typename node_traits::sequence_type>(value_)) {
+            return std::get<typename node_traits::sequence_type>(value_);
         }
-        static const sequence_type empty_seq(allocator_);
+        static const typename node_traits::sequence_type empty_seq(allocator_);
         return empty_seq;
     }
 
     [[nodiscard]] basic_object* add_element() {
-        if (!std::holds_alternative<sequence_type>(value_)) {
-            value_ = sequence_type(allocator_);
+        if (!std::holds_alternative<typename node_traits::sequence_type>(value_)) {
+            value_ = typename node_traits::sequence_type(allocator_);
         }
-        auto& seq = std::get<sequence_type>(value_);
+        auto& seq = std::get<typename node_traits::sequence_type>(value_);
         seq.emplace_back(allocator_);
         return &seq.back();
     }
 
     [[nodiscard]] basic_object* add_element(node_kind k) {
-        if (!std::holds_alternative<sequence_type>(value_)) {
-            value_ = sequence_type(allocator_);
+        if (!std::holds_alternative<typename node_traits::sequence_type>(value_)) {
+            value_ = typename node_traits::sequence_type(allocator_);
         }
-        auto& seq = std::get<sequence_type>(value_);
-        seq.emplace_back(allocator_type(), k);
+        auto& seq = std::get<typename node_traits::sequence_type>(value_);
+        seq.emplace_back(typename node_traits::allocator_type(), k);
         return &seq.back();
     }
 
     [[nodiscard]] bool remove_element(std::size_t index) {
-        if (!std::holds_alternative<sequence_type>(value_) || index >= std::get<sequence_type>(value_).size()) {
+        if (!std::holds_alternative<typename node_traits::sequence_type>(value_)
+            || index >= std::get<typename node_traits::sequence_type>(value_).size()) {
             return false;
         }
-        auto& seq = std::get<sequence_type>(value_);
+        auto& seq = std::get<typename node_traits::sequence_type>(value_);
         seq.erase(seq.begin() + static_cast<std::ptrdiff_t>(index));
         return true;
     }
 
     [[nodiscard]] basic_object* get_element(std::size_t index) {
-        const auto elements = get_node<sequence_type>();
+        const auto elements = get_node<typename node_traits::sequence_type>();
         if (!elements || index >= (*elements)->size()) {
             return nullptr;
         }
@@ -481,7 +568,7 @@ public:
     }
 
     [[nodiscard]] const basic_object* get_element(std::size_t index) const {
-        const auto elements = get_node<sequence_type>();
+        const auto elements = get_node<typename node_traits::sequence_type>();
         if (!elements || index >= (*elements)->size()) {
             return nullptr;
         }
@@ -489,18 +576,18 @@ public:
     }
 
     // Text value operations
-    [[nodiscard]] std::optional<string_type> text_value() const {
+    [[nodiscard]] std::optional<typename node_traits::string_type> text_value() const {
         if (const auto* text = get_node<text_node_type>()) {
             return text->value();
         }
         return std::nullopt;
     }
 
-    void set_text_value(const string_type& val) {
+    void set_text_value(const typename node_traits::string_type& val) {
         value_ = text_node_type(val, allocator_);
     }
 
-    void set_text_value(string_type&& val) {
+    void set_text_value(typename node_traits::string_type&& val) {
         value_ = text_node_type(std::move(val), allocator_);
     }
 
@@ -519,7 +606,7 @@ public:
     }
 
     // Comment operations
-    [[nodiscard]] std::optional<string_type> comment() const {
+    [[nodiscard]] std::optional<typename node_traits::string_type> comment() const {
         // TODO: Return the comment content if the node is a comment node, otherwise return std::nullopt.
         if (const auto* comment = get_node<comment_node_type>()) {
             return comment->content();
@@ -527,17 +614,23 @@ public:
         return std::nullopt;
     }
 
-    void set_comment(const string_type& content) {
+    void set_comment(const typename node_traits::string_type& content) {
         value_ = comment_node_type(content, allocator_);
     }
 
 private:
+    template<typename String>
+    static typename node_traits::string_type make_name(
+        String&& value, const typename node_traits::allocator_type& alloc) {
+        return typename node_traits::string_type(value.begin(), value.end(), alloc);
+    }
+
     // TODO: Update this to check for the exception compiler flag, otherwise, return an ndof_return which will be used to
     //       redefine the return type based on whether exceptions are enabled or not. 
     //       If no exceptions, the return type will be an expected<T, E> type, otherwise it will be T, in this case, void.
 
  
-    node_kind get_node_kind(const node_variant<CharT, CharTraits, Allocator>& value_)  noexcept {
+    node_kind get_node_kind(const node_variant<CharT, Traits, Allocator>& value_)  noexcept {
         if (std::holds_alternative<std::monostate>(value_)) {
             if (!members_.empty()) {
                 return node_kind::mapping;
@@ -556,19 +649,11 @@ private:
         if (std::holds_alternative<comment_node_type>(value_)) {
             return node_kind::comment;
         }
-        if (std::holds_alternative<sequence_type>(value_)) {
+        if (std::holds_alternative<typename node_traits::sequence_type>(value_)) {
             return node_kind::sequence;
         }
         return node_kind::null;
     }
-
-public:
-    // Visitor support
-    template<typename Visitor>
-    [[nodiscard]] decltype(auto) visit(Visitor&& v) {
-        return visit_impl(std::forward<Visitor>(v), std::integral_constant<bool, std::is_const_v<Visitor>>{});
-    }
-
 
 private:
     void initialize_for_kind(node_kind k) {
@@ -587,7 +672,7 @@ private:
                 value_ = attribute_node_type(allocator_);
                 return;
             case node_kind::sequence:
-                value_ = sequence_type(allocator_);
+                value_ = typename node_traits::sequence_type(allocator_);
                 return;
             case node_kind::comment:
                 value_ = comment_node_type(allocator_);
@@ -596,37 +681,46 @@ private:
         throw std::logic_error("Invalid node kind");
     }
 
-    template<typename Visitor>
-    [[nodiscard]] decltype(auto) visit_impl(Visitor&& v) {
-        // TODO: Put these in a map.
-        switch (get_node_kind(v)) {
-            case node_kind::null:
-                return v.visit_null(*this);
-            case node_kind::element:
-                return v.visit_element(*this);
-            case node_kind::attribute:
-                return v.visit_text(*this);
-            case node_kind::text:
-                return v.visit_text(*this);
-            case node_kind::sequence:
-                return v.visit_sequence(*this);
-            case node_kind::mapping:
-                return v.visit_mapping(*this);
-            case node_kind::comment:
-                return v.visit_comment(*this);
-        }
-        throw std::logic_error("Invalid node kind");
-    }
-
-    string_type name_;
+    typename node_traits::string_type name_;
     variant_type value_;
-    attributes_map attributes_;
-    members_map members_;
-    allocator_type allocator_;
+    typename node_traits::attributes_map attributes_;
+    typename node_traits::members_map members_;
+    [[no_unique_address]] typename node_traits::allocator_type allocator_;
 };
+
+// This deduces a basic_object_type from the passed (or default) allocator, and the character type from the string type.
+// This constructor permits the source string and basic_object to use independent allocators.
+
+template<allocator_like Allocator>
+basic_object(const Allocator&)
+    -> basic_object<
+        typename std::allocator_traits<Allocator>::value_type,
+        default_char_traits_t<typename std::allocator_traits<Allocator>::value_type>,
+        Allocator>;
+
+template<allocator_like Allocator>
+basic_object(node_kind, const Allocator&)
+    -> basic_object<
+        typename std::allocator_traits<Allocator>::value_type,
+        default_char_traits_t<typename std::allocator_traits<Allocator>::value_type>,
+        Allocator>;
+
+template<typename CharT, typename CharTraits, allocator_like SourceAllocator>
+basic_object(
+    const std::basic_string<CharT, CharTraits, SourceAllocator>&)
+    -> basic_object<CharT, CharTraits, std::allocator<CharT>>;
+
+template<typename CharT, typename CharTraits, allocator_like SourceAllocator, allocator_like ObjectAllocator>
+basic_object(
+    const std::basic_string<CharT, CharTraits, SourceAllocator>&,
+    const ObjectAllocator&)
+    -> basic_object<CharT, CharTraits, ObjectAllocator>;
+
+
 
 // Type aliases
 using object = basic_object<char, std::allocator<char>>;
 using wobject = basic_object<wchar_t, std::allocator<wchar_t>>;
 
 };
+#endif

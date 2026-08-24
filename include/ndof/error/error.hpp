@@ -1,3 +1,5 @@
+#ifndef NDOF_ERROR_ERROR_HPP
+#define NDOF_ERROR_ERROR_HPP
 #include "ndof/error/allocator_support.hpp"
 #include "ndof/error/configs.hpp"
 #include "ndof/error/object.hpp"
@@ -397,3 +399,4 @@ void generate_or_throw_exception(
 }
 
 } // namespace ndof::error
+#endif

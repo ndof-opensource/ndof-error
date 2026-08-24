@@ -1,35 +1,39 @@
 // Copyright 2026 NDOF-OS
 // SPDX-License-Identifier: Apache-2.0
-
 #ifndef NDOF_ERROR_OBJECT_QUERY_HPP
 #define NDOF_ERROR_OBJECT_QUERY_HPP
 
 // TODO: Move this to the core library.
+ 
+#include "ndof/error/allocator_support.hpp"
+#include "ndof/error/object.hpp"
 
-#include <ndof/error/object.hpp>
-
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <utility>
 
-namespace ndof::error {
+namespace ndof  {
 
 // -----------------------------------------------------------------------------
 // Compile-time XPath-like literal holder, e.g. NDOF_XPATH("/a/b/c")
 // -----------------------------------------------------------------------------
-template <std::size_t N>
+template <typename CharT, std::size_t N>
 struct xpath_literal {
-    char value[N]{};
+    CharT value[N]{};
 
-    consteval xpath_literal(const char (&str)[N]) {
+    consteval xpath_literal(const CharT (&str)[N]) {
         for (std::size_t i = 0; i < N; ++i) value[i] = str[i];
     }
 
-    constexpr std::string_view view() const noexcept {
-        return std::string_view{value, N - 1};
+    constexpr std::basic_string_view<CharT, std::char_traits<CharT>> view() const noexcept {
+        return std::basic_string_view<CharT, std::char_traits<CharT>>{value, N - 1};
     }
+
+    using string_t = std::basic_string<CharT, std::char_traits<CharT>>;
+    using string_view_t = std::basic_string_view<CharT, std::char_traits<CharT>>;
 };
 
 namespace detail {
@@ -64,6 +68,25 @@ consteval std::array<std::string_view, Count> xpath_split(std::string_view p) {
 
 } // namespace detail
 
+// Thrown when parsing stops before an object has been completely processed.
+// The partially parsed object is retained so callers can inspect its state.
+template <typename CharT = ndof::default_char_t,
+          typename Traits = ndof::default_char_traits_t<CharT>,
+          allocator_like Allocator = default_allocator_t>
+class object_parse_exception : public ndof::exception<CharT, Traits, Allocator> {
+public:
+    using object_t = ndof::object<CharT, Traits, Allocator>;
+    explicit object_parse_exception(object_t last_parsed)
+        : last_parsed_(std::move(last_parsed)) {}
+
+    [[nodiscard]] const object_t& last_parsed() const noexcept {
+        return last_parsed_;
+    }
+
+private:
+    object_t last_parsed_;
+};
+
 // -----------------------------------------------------------------------------
 // object_query: a compile-time constructed query over an ndof::object.
 //
@@ -72,35 +95,60 @@ consteval std::array<std::string_view, Count> xpath_split(std::string_view p) {
 // -----------------------------------------------------------------------------
 
 
-template <xpath_literal Path>
+
+template <xpath_literal path>
 class object_query {
 public:
-    static constexpr std::string_view path = Path.view();
-    static constexpr std::size_t step_count = detail::xpath_step_count(path);
+    using Path = decltype(path);
+    using CharT = typename Path::value_type;
+    using Traits = std::char_traits<CharT>;
+    static constexpr std::string_view path_view =path.view() ;
+    static constexpr std::size_t step_count = detail::xpath_step_count(path_view);
     static constexpr std::array<std::string_view, step_count> steps =
-        detail::xpath_split<step_count>(path);
+        detail::xpath_split<step_count>(path_view);
 
     using result_type = std::optional<ndof::object>;
 
     constexpr object_query() noexcept = default;
+    explicit constexpr object_query(const typename Path::string_t& path_str);
 
-    result_type operator()(const ndof::object& root) const {
-        const ndof::object* current = &root;
-        for (const std::string_view step : steps) {
-            const ndof::object* next = resolve(*current, step);
-            if (next == nullptr) return std::nullopt;
-            current = next;
+    // TODO: Fix this.
+     
+    template<allocator_like Allocator>
+    auto operator()(const ndof::object<CharT, Traits, Allocator>&& receiving_node) const {
+        const auto query = [](auto&& obj) -> result_type {
+            const auto* current = &obj;
+            for (const std::string_view step : steps) {
+                const auto* next = obj.resolve(*current, step);
+                if (next == nullptr) return std::nullopt;
+                current = next;
+            }
+            return *current;
+        };
+
+#if defined(__cpp_exceptions) && __cpp_exceptions
+        try {
+            return query(receiving_node);
+        } catch (...) {
+            return std::nullopt;
         }
-        return *current;
+#endif
+        return query(receiving_node);
+
     }
 
-    result_type query(const ndof::object& root) const { return (*this)(root); }
+    
+    result_type query(const object_t& root) const { return (*this)(root); }
 
 private:
     // Resolves a single path step against an object child by name.
-    static const ndof::object* resolve(const ndof::object& obj, std::string_view name) {
+ 
+    static const ndof::object<OtherCharT, OtherTraits, OtherAllocator>* resolve(
+        const ndof::object<Char, OtherTraits, OtherAllocator>& obj,
+        std::string_view name) {
         return obj.find(name);
-    }
+    }   
+ 
 };
 
 template <xpath_literal Path>
@@ -108,8 +156,8 @@ inline constexpr object_query<Path> make_object_query() noexcept {
     return object_query<Path>{};
 }
 
-} // namespace ndof::error
+} // namespace ndof
 
-#define NDOF_XPATH(literal) ::ndof::error::object_query<literal>{}
+#define NDOF_XPATH(literal) ::ndof::object_query<literal>{}
 
 #endif // NDOF_ERROR_OBJECT_QUERY_HPP
