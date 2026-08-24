@@ -376,13 +376,7 @@ public:
 
  
     template<typename String, allocator_like allocator_for_object = Allocator>
-        requires requires {
-            typename std::remove_cvref_t<String>::value_type;
-            typename std::remove_cvref_t<String>::traits_type;
-            requires std::same_as<typename std::remove_cvref_t<String>::value_type, CharT>;
-            requires std::same_as<typename std::remove_cvref_t<String>::traits_type, Traits>;
-            requires std::constructible_from<typename node_traits::allocator_type, const allocator_for_object&>;
-        }
+        requires character_compatible_type<String, CharT, Traits>
     basic_object(
         String&& n,
         const allocator_for_object& alloc = get_default_allocator())
