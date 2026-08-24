@@ -57,7 +57,7 @@ constexpr auto expected_name(node_kind kind) {
     return "invalid";
 }
 
-
+// TODO: Put in core or details.
 template<typename T, typename CharT, typename CharTraits>
 concept character_compatible_type = requires {
     typename std::remove_cvref_t<T>::value_type;
