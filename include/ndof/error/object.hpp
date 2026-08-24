@@ -719,8 +719,8 @@ basic_object(
 
 
 // Type aliases
-using object = basic_object<char, std::allocator<char>>;
-using wobject = basic_object<wchar_t, std::allocator<wchar_t>>;
+using object  = basic_object<char,    rebound_default_allocator_t<char>>;
+using wobject = basic_object<wchar_t, rebound_default_allocator_t<wchar_t>>;
 
 };
 #endif
