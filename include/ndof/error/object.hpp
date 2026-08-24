@@ -373,10 +373,9 @@ public:
         : name_(alloc), value_(std::monostate{}), attributes_(alloc), members_(alloc), allocator_(alloc) {
         initialize_for_kind(k);
     }
-
  
-    template<typename String, allocator_like allocator_for_object = Allocator>
-        requires character_compatible_type<String, CharT, Traits>
+ 
+    template<character_compatible_type<CharT, Traits> String, allocator_like allocator_for_object = Allocator>
     basic_object(
         String&& n,
         const allocator_for_object& alloc = get_default_allocator())
