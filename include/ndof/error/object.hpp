@@ -374,7 +374,6 @@ public:
         initialize_for_kind(k);
     }
  
- 
     template<character_compatible_type<CharT, Traits> String, allocator_like allocator_for_object = Allocator>
     basic_object(
         String&& n,
