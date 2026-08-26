@@ -1,6 +1,7 @@
 #ifndef NDOF_ERROR_ERROR_HPP
 #define NDOF_ERROR_ERROR_HPP
 #include "ndof/error/allocator_support.hpp"
+#include "ndof/error/allocate_unique.hpp"
 #include "ndof/error/configs.hpp"
 #include "ndof/error/object.hpp"
 #include <expected>
@@ -60,23 +61,25 @@ template <typename T> using result_value_type_t = typename result_value_type<T>:
 // When exceptions are disabled, error propagation is done via std::expected,
 // carrying either the value T (or std::reference_wrapper<T> if T is a
 // reference) or an ndof::exception on failure.
-template <typename T, typename CharT, typename Traits> struct result_impl<T, false, CharT, Traits> {
-    using type = std::expected<result_value_type_t<T>, ndof::error::basic_exception<CharT, Traits>>;
+template <typename T, typename CharT, typename Traits, typename Allocator> struct result_impl<T, false, CharT, Traits, Allocator> {
+    using expected_type = std::expected<result_value_type_t<T>, ndof::error::basic_exception<CharT, Traits>>;
+    using type = ndof_unique_ptr<expected_type, deleter_with_allocator<expected_type, Allocator>>;
 };
 
 // When exceptions are enabled, error propagation is done via throwing, so the
 // return type is simply T (references are passed through unwrapped, since
 // throwing does not go through std::expected).
-template <typename T, typename CharT, typename Traits> struct result_impl<T, true, CharT, Traits> {
+template <typename T, typename CharT, typename Traits, typename Allocator> struct result_impl<T, true, CharT, Traits, Allocator> {
     using type = T;
 };
 
 template <typename T, typename CharT = ndof::default_char_t,
-          typename Traits = ndof::default_char_traits_t<CharT>>
-using result_t = typename result_impl<T, exceptions_feature_enabled(), CharT, Traits>::type;
+          typename Traits = ndof::default_char_traits_t<CharT>, typename Allocator = default_allocator_t>
+using result_t = typename result_impl<T, exceptions_feature_enabled(), CharT, Traits, Allocator>::type;
 
+template<typename Allocator = default_allocator_t>
 using void_result_t =
-    result_t<void, ndof::default_char_t, ndof::default_char_traits_t<ndof::default_char_t>>;
+    result_t<void, ndof::default_char_t, ndof::default_char_traits_t<ndof::default_char_t>, Allocator>;
 
 template <typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>>

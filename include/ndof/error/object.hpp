@@ -621,8 +621,34 @@ private:
     //       redefine the return type based on whether exceptions are enabled or not. 
     //       If no exceptions, the return type will be an expected<T, E> type, otherwise it will be T, in this case, void.
 
+    
+    consteval node_kind get_expected_node_kind() const noexcept {
+        if (std::holds_alternative<std::monostate>(value_)) {
+            if (!members_.empty()) {
+                return node_kind::mapping;
+            }
+            if (!name_.empty() || !attributes_.empty()) {
+                return node_kind::element;
+            }
+            return node_kind::null;
+        }
+        if (std::holds_alternative<text_node_type>(value_)) {
+            return node_kind::text;
+        }
+        if (std::holds_alternative<attribute_node_type>(value_)) {
+            return node_kind::attribute;
+        }
+        if (std::holds_alternative<comment_node_type>(value_)) {
+            return node_kind::comment;
+        }
+        if (std::holds_alternative<typename node_traits::sequence_type>(value_)) {
+            return node_kind::sequence;
+        }
+        return node_kind::null;
+    }
  
     node_kind get_node_kind(const node_variant<CharT, Traits, Allocator>& value_)  noexcept {
+        
         if (std::holds_alternative<std::monostate>(value_)) {
             if (!members_.empty()) {
                 return node_kind::mapping;

@@ -50,7 +50,7 @@
 #define NDOF_EXCEPTIONS_ENABLED 0
 #endif
 #endif
-
+ 
 #if defined(NDOF_RTTI_ENABLED) 
 #include <typeindex>
 using type_token = std::type_index;
