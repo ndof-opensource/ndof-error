@@ -6,22 +6,7 @@
 #include <string_view>
 
 namespace ndof::error {
-
-namespace {
-
-#if defined(NDEBUG)
-constexpr std::string_view kBuildModeValue = "release";
-#else
-constexpr std::string_view kBuildModeValue = "debug";
-#endif
-
-#if defined(NDOF_RTTI_ENABLED) && (NDOF_RTTI_ENABLED)
-constexpr bool kRttiEnabled = true;
-#else
-constexpr bool kRttiEnabled = false;
-#endif
-
-} // namespace
+ 
 
 ndof::build_mode build_mode() noexcept {
     if (kBuildModeValue == "debug") {

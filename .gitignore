@@ -1,5 +1,7 @@
 build/
 CMakeUserPresets.json
+relocate/build-ndof-workspace.sh
+relocate/build/
 .cache/
 compile_commands.json
 .DS_Store

@@ -126,14 +126,15 @@ public:
             return *current;
         };
 
-#if defined(__cpp_exceptions) && __cpp_exceptions
+#if NDOF_EXCEPTIONS_ENABLED
         try {
             return query(receiving_node);
         } catch (...) {
             return std::nullopt;
         }
-#endif
+#else
         return query(receiving_node);
+#endif
 
     }
 

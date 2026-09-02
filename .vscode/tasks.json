@@ -34,6 +34,13 @@
             "command": "scripts/build.sh tsan",
             "group": "build",
             "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "build (ndof workspace)",
+            "type": "shell",
+            "command": "relocate/build-ndof-workspace.sh",
+            "group": "build",
+            "problemMatcher": ["$gcc"]
         }
     ]
 }

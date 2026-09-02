@@ -15,7 +15,7 @@ using check_mode = ndof::build_mode;
 
 // TODO: should define stream to object operators.
 
-// TODO: Should be IColoneable.
+// TODO: Should be ICloneable.
 //       Should be Iserializable.
 //       Should be IDeserializable.
 //       Should be IStreamable.
@@ -31,7 +31,8 @@ template <typename, typename> struct basic_exception;
 // that `result` can be defined as a single alias template regardless of the
 // exceptions-enabled setting.
 template <typename T, bool ExceptionsEnabled, typename CharT = ndof::default_char_t,
-          typename Traits = ndof::default_char_traits_t<CharT>>
+          typename Traits = ndof::default_char_traits_t<CharT>,
+          typename Allocator = default_allocator_t>
 struct result_impl;
 
 // std::expected does not support reference types (or rvalue-reference
@@ -301,7 +302,8 @@ private:
 // TODO: Consider making the default allocator factory a singleton using the singleton template.
 template <typename ExceptionType, typename CharT = ndof::default_char_t,
           typename Traits = ndof::default_char_traits_t<CharT>,
-          ndof::allocator_like Allocator = std::allocator<CharT>>
+// TODO: Fix this.
+          ndof::allocator_like Allocator = default_allocator_t>
     requires(exceptions_feature_enabled() &&
              std::derived_from<std::remove_cvref_t<ExceptionType>,
                                ndof::error::basic_exception<CharT, Traits>> &&

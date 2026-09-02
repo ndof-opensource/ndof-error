@@ -1,16 +1,16 @@
 find_package(GTest REQUIRED CONFIG)
 
-add_executable(unit_tests
+add_executable(error_unit_tests
     allocate_unique_test.cpp
     version_test.cpp
     object_test.cpp)
 
-target_link_libraries(unit_tests PRIVATE
+target_link_libraries(error_unit_tests PRIVATE
     ndof::error
     GTest::gtest_main)
 
 include(GoogleTest)
-gtest_discover_tests(unit_tests)
+gtest_discover_tests(error_unit_tests)
 
 add_executable(no_exception_allocate_unique_test
     no_exception_allocate_unique_test.cpp)
