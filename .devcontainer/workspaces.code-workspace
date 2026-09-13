@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../home/dev/ndof-core"
+		},
+		{
+			"path": "../../../home/dev/design_patterns"
+		}
+	],
+	"settings": {}
+}

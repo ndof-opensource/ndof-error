@@ -1,4 +1,4 @@
-#include "ndof/error/allocate_unique.hpp"
+#include "/home/dev/ndof-core/include/ndof/core/allocate_unique.hpp"
 
 #include <concepts>
 #include <cstddef>
@@ -73,20 +73,20 @@ private:
 };
 
 using tracking_pointer = decltype(
-    make_unique_with_allocator<int>(std::declval<tracking_allocator<int>>(), 42));
+    ndof::make_unique_with_allocator<int>(std::declval<tracking_allocator<int>>(), 42));
 using standard_pointer = decltype(
-    make_unique_with_allocator<int>(std::declval<std::allocator<int>>(), 42));
+    ndof::make_unique_with_allocator<int>(std::declval<std::allocator<int>>(), 42));
 
-static_assert(!std::same_as<tracking_pointer, standard_pointer>);
+static_assert(std::same_as<tracking_pointer, standard_pointer>);
 static_assert(std::same_as<
               typename tracking_pointer::deleter_type,
-              deleter_with_allocator<int, tracking_allocator<int>>>);
+              ndof::deallocating_deleter>);
 
 TEST(AllocateUnique, UsesProvidedAllocator) {
     allocation_counts counts;
 
     {
-        auto pointer = make_unique_with_allocator<int>(tracking_allocator<int>{counts}, 42);
+        auto pointer = ndof::make_unique_with_allocator<int>(tracking_allocator<int>{counts}, 42);
         EXPECT_EQ(*pointer, 42);
         EXPECT_EQ(counts.allocated, 1U);
     }
@@ -98,11 +98,11 @@ TEST(AllocateUnique, DestroysEveryArrayElement) {
     allocation_counts counts;
 
     {
-        auto bounded = make_unique_with_allocator<counted_object[3]>(
+        auto bounded = ndof::make_unique_with_allocator<counted_object[3]>(
             tracking_allocator<counted_object>{counts});
         EXPECT_EQ(counted_object::live_count, 3);
 
-        auto unbounded = make_unique_with_allocator<counted_object[]>(
+        auto unbounded = ndof::make_unique_with_allocator<counted_object[]>(
             tracking_allocator<counted_object>{counts}, 2);
         EXPECT_EQ(counted_object::live_count, 5);
     }

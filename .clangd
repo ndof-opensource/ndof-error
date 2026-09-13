@@ -7,3 +7,6 @@
 CompileFlags:
   CompilationDatabase: build/Debug
   Add: [-std=c++23]
+  Add:
+    - -I/workspaces/ndof-error/include
+    - -I/home/dev/ndof-core/include

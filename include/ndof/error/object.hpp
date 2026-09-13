@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #ifndef NDOF_ERROR_OBJECT_HPP
 #define NDOF_ERROR_OBJECT_HPP
-#include "ndof/error/allocator_support.hpp"
-#include "ndof/error/configs.hpp"
+#include "/home/dev/ndof-core/include/ndof/core/allocator_support.hpp"
+#include "/home/dev/ndof-core/include/ndof/core/configs.hpp"
  
 // TODO: Move this to the core library.
 // TODO: Make sure the method classifier stuff specializes on noexcept.

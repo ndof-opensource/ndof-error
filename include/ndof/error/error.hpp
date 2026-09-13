@@ -1,13 +1,13 @@
 #ifndef NDOF_ERROR_ERROR_HPP
 #define NDOF_ERROR_ERROR_HPP
-#include "ndof/error/allocator_support.hpp"
-#include "ndof/error/allocate_unique.hpp"
-#include "ndof/error/configs.hpp"
+// TODO: Fix these after merging with main to pull in the new cmake.
+#include "/home/dev/ndof-core/include/ndof/core/allocator_support.hpp"
+#include "/home/dev/ndof-core/include/ndof/core/allocate_unique.hpp"
+#include "/home/dev/ndof-core/include/ndof/core/configs.hpp"
 #include "ndof/error/object.hpp"
 #include <expected>
 #include <memory>
 #include <source_location>
-#include <utility>
 
 namespace ndof::error {
 
@@ -63,8 +63,10 @@ template <typename T> using result_value_type_t = typename result_value_type<T>:
 // carrying either the value T (or std::reference_wrapper<T> if T is a
 // reference) or an ndof::exception on failure.
 template <typename T, typename CharT, typename Traits, typename Allocator> struct result_impl<T, false, CharT, Traits, Allocator> {
-    using expected_type = std::expected<result_value_type_t<T>, ndof::error::basic_exception<CharT, Traits>>;
-    using type = ndof_unique_ptr<expected_type, deleter_with_allocator<expected_type, Allocator>>;
+    using expected_t = std::expected<result_value_type_t<T>, ndof::error::basic_exception<CharT, Traits>>;
+    using rebound_allocator_t =
+        typename std::allocator_traits<Allocator>::template rebind_alloc<expected_t>;
+    using type = ndof::allocated_unique_ptr<expected_t>;
 };
 
 // When exceptions are enabled, error propagation is done via throwing, so the
