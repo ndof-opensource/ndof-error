@@ -53,9 +53,7 @@ endif()
 
 add_library(error
     src/version.cpp
-    src/configs.cpp
-    include/ndof/error/fixed_string.hpp
-    include/ndof/error/allocate_unique.hpp)
+    include/ndof/error/error.hpp)
 add_library(ndof::error ALIAS error)
 
 set_target_properties(error PROPERTIES

@@ -1,8 +1,8 @@
-#ifndef NDOF_EXCEPTIONS_ENABLED
-#define NDOF_EXCEPTIONS_ENABLED 0
+#ifndef NDOF_EXCEPTIONS_FEATURE_ENABLED
+#define NDOF_EXCEPTIONS_FEATURE_ENABLED 0
 #endif
 
-#include "ndof/error/allocate_unique.hpp"
+#include "/home/dev/ndof-core/include/ndof/core/allocate_unique.hpp"
 
 #include <concepts>
 #include <cstddef>
@@ -26,14 +26,14 @@ struct null_allocator {
     void deallocate(T*, std::size_t) noexcept {}
 };
 
-using pointer_type = std::unique_ptr<int, deleter_with_allocator<int, null_allocator<int>>>;
+using pointer_type = ndof::allocated_unique_ptr<int>;
 using result_type = decltype(
-    make_unique_with_allocator<int>(std::declval<null_allocator<int>>(), 42));
+    ndof::make_unique_with_allocator<int>(std::declval<null_allocator<int>>(), 42));
 
-static_assert(std::same_as<result_type, std::expected<pointer_type, allocation_error>>);
+static_assert(std::same_as<result_type, std::expected<pointer_type, ndof::allocation_error>>);
 static_assert(!ndof::exceptions_feature_enabled());
 
 int main() {
-    auto result = make_unique_with_allocator<int>(null_allocator<int>{}, 42);
-    return !result && result.error() == allocation_error::allocation_failed ? 0 : 1;
+    auto result = ndof::make_unique_with_allocator<int>(null_allocator<int>{}, 42);
+    return !result && result.error() == ndof::allocation_error::allocation_failed ? 0 : 1;
 }
