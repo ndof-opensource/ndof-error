@@ -9,6 +9,3 @@ CompileFlags:
   # standard so such headers get the right language mode. Must track the
   # project standard (currently C++23, decision 4).
   Add: [-std=c++23]
-  Add:
-    - -I/workspaces/ndof-error/include
-    - -I/home/dev/ndof-core/include

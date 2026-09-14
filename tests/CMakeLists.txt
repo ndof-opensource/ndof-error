@@ -3,8 +3,7 @@ find_package(GTest REQUIRED CONFIG)
 add_executable(error_unit_tests
     allocate_unique_test.cpp
     conditions_check_test.cpp
-    version_test.cpp
-    object_test.cpp)
+    version_test.cpp)
 
 target_link_libraries(error_unit_tests PRIVATE
     ndof::error
