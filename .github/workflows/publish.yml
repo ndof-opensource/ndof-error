@@ -1,0 +1,15 @@
+# Publishes this library's Conan recipe to the public ndof remote when a
+# version tag (v0.1.0) is pushed. All logic lives in the reusable workflow
+# in ndof-infra; see ndof-infra/docs/releasing.md for the specific procedure.
+# This workflow-ref SHA is maintained by ndof-infra's propagate-pins
+# workflow (Dependabot cannot track a tagless repo).
+name: Publish
+on:
+  push:
+    tags: ["v*"]
+jobs:
+  publish:
+    uses: ndof-opensource/ndof-infra/.github/workflows/publish.yml@3cf7c263697f656b4925a7e25b238f924f57d60f # main 2026-09-05
+    secrets:
+      CLOUDSMITH_USER: ${{ secrets.CLOUDSMITH_USER }}
+      CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
