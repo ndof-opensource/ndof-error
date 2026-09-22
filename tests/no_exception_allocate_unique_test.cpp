@@ -2,7 +2,7 @@
 #define NDOF_EXCEPTIONS_FEATURE_ENABLED 0
 #endif
 
-#include "/home/dev/ndof-core/include/ndof/core/allocate_unique.hpp"
+#include <ndof/core/allocate_unique.hpp>
 
 #include <concepts>
 #include <cstddef>

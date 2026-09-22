@@ -1,10 +1,10 @@
 #ifndef NDOF_ERROR_ERROR_HPP
 #define NDOF_ERROR_ERROR_HPP
-// TODO: Fix these after merging with main to pull in the new cmake.
-#include "/home/dev/ndof-core/include/ndof/core/allocate_unique.hpp"
-#include "/home/dev/ndof-core/include/ndof/core/allocator_support.hpp"
-#include "/home/dev/ndof-core/include/ndof/core/configs.hpp"
-#include "/home/dev/ndof-core/include/ndof/core/object.hpp"
+
+#include <ndof/core/allocate_unique.hpp>
+#include <ndof/core/allocator_support.hpp>
+#include <ndof/core/configs.hpp>
+#include <ndof/core/object.hpp>
 #include <expected>
 #include <memory>
 #include <optional>

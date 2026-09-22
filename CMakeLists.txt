@@ -20,6 +20,8 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(CheckCXXSourceCompiles)
 
+find_package(ndof-core REQUIRED CONFIG)
+
 # This project does not currently use C++20 modules;
 # CMake 3.28+ module scanning also injects compiler flags that
 # clang-tidy cannot parse.
@@ -60,6 +62,8 @@ set_target_properties(error PROPERTIES
     OUTPUT_NAME ndof-error)
 
 target_compile_features(error PUBLIC cxx_std_23)
+
+target_link_libraries(error PUBLIC ndof::core)
 
 target_include_directories(error PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
